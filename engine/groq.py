@@ -9,9 +9,8 @@ from pydantic import Field
 sys.path.insert(0, r"./")
 from groq import Groq
 from .base import BaseEngine
-from .utils import hash_input, pop_half_dict, create_dynamic_model
-from strings import *
-
+from .utils import hash_input, pop_half_dict, create_dynamic_model, throttle
+from strings import remove_fuzzy_repeating_suffix
 
 # Cache the fail prompt to avoid running translation again for subsequent calls
 CACHE_FAIL_PROMPT = {}
@@ -73,7 +72,7 @@ class GroqEngine(BaseEngine):
         return re.sub(pattern, "", text, flags=re.DOTALL | re.MULTILINE)
 
     @throttle(
-        calls_per_minute=28,
+        calls_per_minute=20,
         verbose=False,
         break_interval=1200,
         break_duration=60,
@@ -84,10 +83,10 @@ class GroqEngine(BaseEngine):
         input_data: Union[str, List[str]],
         src: str,
         dest: str,
-        fail_translation_code: str = "P1OP1_F",  # Pass in this code to replace the input_data if the exception is *unavoidable*, any example that contain this will be remove post translation
+        fail_translation_code: str = "P1OP1_F",  # Pass in this code to replace the input_data if the exception is *unavoidable*
         **kwargs,
     ) -> Union[str, List[str]]:
-        global CACHE_INIT_PROMPT, CACHE_FAIL_PROMPT
+        global CACHE_FAIL_PROMPT
         data_type = "list" if isinstance(input_data, list) else "str"
 
         if data_type == "list":
@@ -132,42 +131,6 @@ class GroqEngine(BaseEngine):
                 "DO NOT add extra information or remove any information inside, just translate."
             )
 
-        # Check if the init prompt is already in the cache
-        if (src, dest) not in CACHE_INIT_PROMPT or (
-            data_type == "list" and (src, dest, "list") not in CACHE_INIT_PROMPT
-        ):
-            translated_system_prompt = (
-                "You are a skilled translator tasked with translating text from **English** to **Vietnamese**. "
-                "Avoid translating names, places, code snippets, LaTeX, and key phrases. "
-                "Prioritize context to ensure an accurate and natural translation. "
-                "Respond with **only the translation**, as it will be used directly."
-            )
-            translated_postfix_prompt = (
-                "Translate all the above text inside the translation block from **English** to **Vietnamese**. "
-                "DO NOT add extra information or remove any information inside, just translate."
-            )
-
-            # Cache the init prompt
-            if data_type == "list":
-                CACHE_INIT_PROMPT[(src, dest, "list")] = (
-                    translated_system_prompt,
-                    translated_postfix_prompt,
-                )
-            else:
-                CACHE_INIT_PROMPT[(src, dest)] = (
-                    translated_system_prompt,
-                    translated_postfix_prompt,
-                )
-
-        if data_type == "list":
-            translated_system_prompt, translated_postfix_prompt = CACHE_INIT_PROMPT[
-                (src, dest, "list")
-            ]
-        else:
-            translated_system_prompt, translated_postfix_prompt = CACHE_INIT_PROMPT[
-                (src, dest)
-            ]
-
         prefix_prompt_block = "{|[|{START_TRANSLATION_BLOCK}|]|}"
         postfix_prompt_block = "{|[|{END_TRANSLATION_BLOCK}|]|}"
         prefix_separator = "=" * 10
@@ -175,29 +138,29 @@ class GroqEngine(BaseEngine):
 
         prefix_prompt = f"{prefix_prompt_block}\n"
         prefix_prompt += prefix_separator
-        postfix_prompt = postfix_separator
-        postfix_prompt += f"\n{postfix_prompt_block}"
+        postfix_prompt_text = postfix_separator
+        postfix_prompt_text += f"\n{postfix_prompt_block}"
 
-        translated_system_prompt += (
+        final_system_prompt = system_prompt + (
             "\n\n" + postfix_system_prompt if postfix_system_prompt else ""
         )
-        translated_prompt = (
+        final_user_prompt = (
             prefix_prompt
             + "\n\n"
             + prompt
             + "\n\n"
-            + postfix_prompt
+            + postfix_prompt_text
             + "\n\n"
-            + translated_postfix_prompt
+            + postfix_prompt
         )
 
         chat_args = {
             "messages": [
                 {
                     "role": "system",
-                    "content": translated_system_prompt,
+                    "content": final_system_prompt,
                 },
-                {"role": "user", "content": translated_prompt},
+                {"role": "user", "content": final_user_prompt},
             ],
             "model": "llama3-8b-8192",
             "temperature": 0.3,
@@ -209,14 +172,12 @@ class GroqEngine(BaseEngine):
         if data_type == "list":
             chat_args["response_format"] = {"type": "json_object"}
 
-        if len((translated_system_prompt + translated_prompt).split()) > 8000:
+        if len((final_system_prompt + final_user_prompt).split()) > 8000:
             if data_type == "list":
                 return [fail_translation_code, fail_translation_code]
             return fail_translation_code
 
         # Clear the cache if the cache is too large
-        if len(CACHE_INIT_PROMPT) > 5:
-            _, CACHE_INIT_PROMPT = pop_half_dict(CACHE_INIT_PROMPT)
         if len(CACHE_FAIL_PROMPT) > 10000:
             _, CACHE_FAIL_PROMPT = pop_half_dict(CACHE_FAIL_PROMPT)
 
