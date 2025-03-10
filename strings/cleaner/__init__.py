@@ -1,0 +1,1 @@
+from .fuzzy import remove_fuzzy_repeating_suffix
