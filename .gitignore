@@ -2,3 +2,7 @@
 __pycache__/
 *.pyd
 .vscode
+.env
+.env.*
+!*.env.example
+out/

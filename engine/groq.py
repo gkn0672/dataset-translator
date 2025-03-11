@@ -3,7 +3,7 @@ import re
 import sys
 import json
 from typing import Union, List
-
+from dotenv import load_dotenv
 from pydantic import Field
 
 sys.path.insert(0, r"./")
@@ -12,6 +12,7 @@ from .base import BaseEngine
 from .utils import hash_input, pop_half_dict, create_dynamic_model, throttle
 from strings import remove_fuzzy_repeating_suffix
 
+load_dotenv()
 # Cache the fail prompt to avoid running translation again for subsequent calls
 CACHE_FAIL_PROMPT = {}
 MAX_LIST_RETRIES = 6  # The maximum number of retries for groq list translation
