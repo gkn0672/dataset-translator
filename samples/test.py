@@ -1,5 +1,4 @@
 # TODO: experiment with data read with stream mode
-import random
 import sys
 
 sys.path.insert(0, r"./")
