@@ -1,3 +1,4 @@
+# TODO: experiment with data read with stream mode
 import random
 import sys
 
@@ -44,8 +45,7 @@ class MagpieUltraV01Parser(DataParser):
         # I just want to be sure that the file path is correct
         super(MagpieUltraV01Parser, self).read()
 
-        self.data_read = load_dataset("argilla/magpie-ultra-v0.1")
-        self.system_prompts = load_dataset("teilomillet/system_prompt")
+        self.data_read = load_dataset("argilla/magpie-ultra-v0.1", streaming=True)
 
         return None
 
@@ -59,20 +59,9 @@ class MagpieUltraV01Parser(DataParser):
         for split in self.data_read:
             for data in tqdm(self.data_read[split], desc=f"Converting {split} data"):
                 data_dict = {}
-                random_index = random.randint(0, len(self.system_prompts["train"]) - 1)
-
-                if random.random() < 0.5:
-                    data_dict["system_prompt"] = None
-                else:
-                    data_dict["system_prompt"] = self.system_prompts["train"][
-                        random_index
-                    ]["prompt"]
-
                 data_dict["qas_id"] = self.id_generator()
                 data_dict["question_text"] = data["instruction"]
                 data_dict["orig_answer_texts"] = data["response"]
-                data_dict["answer_lengths"] = None
-
                 data_converted.append(data_dict)
 
         # Be sure to assign the final data list to self.converted_data

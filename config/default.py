@@ -12,12 +12,9 @@ class DefaultConfig(BaseConfig):
     A single training/test example for base config.
     """
 
-    system_prompt: str
-
     question_text: str
 
     orig_answer_texts: str = None
-    answer_lengths: int = None
 
     def __post_init__(self) -> None:
         # Post validate
@@ -29,12 +26,9 @@ class DefaultConfig(BaseConfig):
     def __repr__(self) -> str:
         s = ""
         s += f"\n Question id: {self.qas_id}"
-        s += f"\n System prompt: {self.system_prompt}"
         s += f"\n Question: {self.question_text}"
         if self.orig_answer_texts:
             s += f"\n Answer text: {self.orig_answer_texts}"
-            s += f"\n Answer length: {self.answer_lengths}"
-
         return s
 
     @property
@@ -121,7 +115,6 @@ if __name__ == "__main__":
         qas_id="8",
         question_text="What do cats eat?",
         orig_answer_texts="meat and fish",
-        system_prompt="Hi",
     )
 
     # print(example8)
@@ -132,7 +125,6 @@ if __name__ == "__main__":
         qas_id="6",
         question_text="What is the meaning of existence?",
         orig_answer_texts="Dying",
-        system_prompt="Hello",
     )
     # print(example6)
     print(example6.get_example(is_training=True, task_type="SEQ_2_SEQ_LM"))
