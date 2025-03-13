@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from engine.base import BaseEngine
 from engine.groq import GroqEngine
+from engine.ollama import OllamaEngine
 from config.default import DefaultConfig
 from .callback import ParserCallback
 from .preprocessing.utils import (
@@ -164,12 +165,21 @@ class DataParser(metaclass=ForceBaseCallMeta):
     @property
     def get_translator(self) -> BaseEngine:
         """
-        Returns a deep copy of the translator object.
+        Returns a new instance of the translator engine with the same parameters.
 
         Returns:
-            Provider: A deep copy of the translator object.
+            BaseEngine: A new instance of the translator engine.
         """
-        return deepcopy(self.translator)()
+        # Create a new instance of the same class with the same parameters
+        translator_class = type(self.translator)
+
+        # Specifically check for OllamaEngine type
+        if isinstance(self.translator, OllamaEngine):
+            return translator_class(
+                model_name=self.translator.model_name, host=self.translator.host
+            )
+
+        return translator_class()
 
     @staticmethod
     def id_generator(
@@ -441,7 +451,7 @@ class DataParser(metaclass=ForceBaseCallMeta):
         self,
         src_texts: Union[List[str], str],
         translator: BaseEngine = None,
-        sub_list_idx: int = None,  # sub_list_idx is for pass through of index information and can be merge later by __sublist_multithread_translate
+        sub_list_idx: int = None,
     ) -> Union[List[str], str, Dict[List[str], int]]:
         """
         Actual place where translation take place
@@ -467,10 +477,9 @@ class DataParser(metaclass=ForceBaseCallMeta):
                 return src_texts
 
         assert self.do_translate, "Please enable translate via self.do_translate"
-        # This if is for multithread Translator instance
-        translator_instance = (
-            deepcopy(self.translator)() if translator is None else translator
-        )
+
+        # Instead of deepcopy, use get_translator which handles OllamaEngine specially
+        translator_instance = self.get_translator if translator is None else translator
 
         target_texts = translator_instance.translate(
             src_texts,

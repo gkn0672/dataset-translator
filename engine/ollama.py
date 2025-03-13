@@ -1,9 +1,9 @@
 import re
 import sys
 import json
+import requests
 from typing import Union, List
 from pydantic import Field
-from openai import OpenAI
 
 sys.path.insert(0, r"./")
 from .base import BaseEngine
@@ -32,7 +32,7 @@ KEEP_ORG_TRANSLATION = True
 
 class OllamaEngine(BaseEngine):
     """
-    Engine implementation for Ollama local LLM using the OpenAI Python library.
+    Engine implementation for Ollama local LLM using Ollama's native API.
     """
 
     def __init__(self, model_name="llama3", host="http://localhost:11434"):
@@ -40,11 +40,11 @@ class OllamaEngine(BaseEngine):
         self.model_name = model_name
         self.host = host
 
-        # Initialize OpenAI client for Ollama
-        self.client = OpenAI(
-            base_url=f"{self.host}/v1",
-            api_key="ollama",  # required but unused
-        )
+        # Use Ollama's native API endpoint
+        self.api_url = f"{self.host}/api/chat"
+
+        # Use a session for connection pooling
+        self.session = requests.Session()
 
         self.translator = self  # Assign self as translator
 
@@ -74,11 +74,11 @@ class OllamaEngine(BaseEngine):
         return re.sub(pattern, "", text, flags=re.DOTALL | re.MULTILINE)
 
     @throttle(
-        calls_per_minute=20,
+        calls_per_minute=200,
         verbose=False,
         break_interval=1200,
-        break_duration=60,
-        jitter=3,
+        break_duration=6,
+        jitter=2,  # Added jitter to spread out requests
     )
     def _do_translate(
         self,
@@ -141,30 +141,39 @@ class OllamaEngine(BaseEngine):
             # Calculate approximate token count (rough estimate)
             total_tokens = len((system_content + user_content).split())
             if total_tokens > 8000:
-                return [fail_translation_code, fail_translation_code]
+                return [fail_translation_code] * len(input_data)
 
             # Clear the cache if it's too large
             if len(CACHE_FAIL_PROMPT) > 10000:
                 _, CACHE_FAIL_PROMPT = pop_half_dict(CACHE_FAIL_PROMPT)
 
             try:
-                # Create messages for the chat API
+                # Format messages for the native API
                 messages = [
                     {"role": "system", "content": system_content},
                     {"role": "user", "content": user_content},
                 ]
 
-                # Call the OpenAI client with Ollama
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=messages,
-                    temperature=0.3,
-                    top_p=0.4,
-                    response_format={"type": "json_object"},
-                )
+                # Prepare payload for Ollama's native API
+                payload = {
+                    "model": self.model_name,
+                    "messages": messages,
+                    "options": {"temperature": 0.3, "top_p": 0.4, "num_predict": 1024},
+                    "stream": False,  # No streaming for translation
+                }
+
+                # Send request to Ollama's native API
+                response = self.session.post(self.api_url, json=payload, timeout=60)
+
+                response.raise_for_status()
+                response_data = response.json()
+
+                if "message" not in response_data:
+                    raise ValueError("Invalid response format from Ollama API")
 
                 if hash_input(input_data) in CACHE_FAIL_PROMPT:
                     CACHE_FAIL_PROMPT.pop(hash_input(input_data))
+
             except Exception as e:
                 # Handle unavoidable exceptions
                 input_hash = hash_input(input_data)
@@ -174,7 +183,7 @@ class OllamaEngine(BaseEngine):
                         print(
                             f"\nUnavoidable exception: {e}\nOllama max retries reached for list translation"
                         )
-                        return [fail_translation_code, fail_translation_code]
+                        return [fail_translation_code] * len(input_data)
                     else:
                         CACHE_FAIL_PROMPT[input_hash] += 1
                 else:
@@ -184,25 +193,80 @@ class OllamaEngine(BaseEngine):
                 raise e
 
             try:
-                # Parse the JSON response
-                output_text = response.choices[0].message.content
-                # Validate and parse the JSON
-                output_schema = Translation.model_validate_json(output_text)
-                output_dict = output_schema.model_dump()
-                final_result = [
-                    output_dict[f"translation_{i}"] for i in range(len(input_data))
-                ]
-            except Exception as json_error:
-                print(f"Error parsing JSON response: {json_error}")
-                return [fail_translation_code, fail_translation_code]
+                # Extract content from Ollama's native API response
+                output_text = response_data["message"]["content"]
+                print(f"Response content (first 200 chars): {output_text[:200]}...")
+
+                # Try multiple strategies to extract translations
+                try:
+                    # First strategy: clean up and parse JSON
+                    clean_text = output_text.strip()
+                    if clean_text.startswith("```json"):
+                        clean_text = clean_text[7:]
+                    if clean_text.endswith("```"):
+                        clean_text = clean_text[:-3]
+                    clean_text = clean_text.strip()
+
+                    # Try to find a valid JSON block using regex
+                    json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
+                    json_matches = re.findall(json_pattern, clean_text)
+
+                    if json_matches:
+                        print(f"Found potential JSON objects: {len(json_matches)}")
+                        json_text = json_matches[0]
+                        json_data = json.loads(json_text)
+                    else:
+                        # Fallback to direct parsing
+                        json_data = json.loads(clean_text)
+
+                    # Extract translations
+                    final_result = []
+                    for i in range(len(input_data)):
+                        key = f"translation_{i}"
+                        if key in json_data:
+                            final_result.append(json_data[key])
+                        else:
+                            # Try alternative keys
+                            for alt_key in [f"text_{i}", f"translated_{i}"]:
+                                if alt_key in json_data:
+                                    final_result.append(json_data[alt_key])
+                                    break
+                            else:
+                                raise KeyError(f"Missing key {key} in JSON response")
+                except Exception as json_error:
+                    print(f"JSON parsing error: {json_error}")
+                    # Try to extract translations using regex pattern
+                    pattern = r'"translation_(\d+)"\s*:\s*"([^"]+)"'
+                    matches = re.findall(pattern, output_text)
+
+                    if matches:
+                        print(
+                            f"Extracting translations with regex. Found {len(matches)} matches."
+                        )
+                        translations = {}
+                        for idx_str, text in matches:
+                            idx = int(idx_str)
+                            translations[idx] = text
+
+                        final_result = []
+                        for i in range(len(input_data)):
+                            if i in translations:
+                                final_result.append(translations[i])
+                            else:
+                                final_result.append(fail_translation_code)
+                    else:
+                        print("Could not extract translations. Using fail code.")
+                        final_result = [fail_translation_code] * len(input_data)
+            except Exception as e:
+                print(f"Error processing response: {e}")
+                return [fail_translation_code] * len(input_data)
 
         else:
-            # Single string translation
+            # Single string translation - simplified approach
             system_prompt = (
-                "You are a skilled translator tasked with translating text from **English** to **Vietnamese**. "
-                "Avoid translating names, places, code snippets, LaTeX, and key phrases. "
-                "Prioritize context to ensure an accurate and natural translation. "
-                "Respond with **only the translation**, as it will be used directly."
+                "You are a skilled translator. Translate the following text from English to Vietnamese. "
+                "Keep names, places, code snippets, LaTeX, and key technical terms unchanged. "
+                "Return ONLY the translated text with no explanations, no formatting, and no additional content."
             )
 
             prefix_prompt_block = "{|[|{START_TRANSLATION_BLOCK}|]|}"
@@ -228,19 +292,33 @@ class OllamaEngine(BaseEngine):
                 _, CACHE_FAIL_PROMPT = pop_half_dict(CACHE_FAIL_PROMPT)
 
             try:
-                # Create messages for the chat API
+                # Format messages for Ollama's native API
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content},
                 ]
 
-                # Call the OpenAI client with Ollama
-                response = self.client.chat.completions.create(
-                    model=self.model_name, messages=messages, temperature=0.3, top_p=0.4
-                )
+                # Prepare payload for Ollama's native API
+                payload = {
+                    "model": self.model_name,
+                    "messages": messages,
+                    "options": {"temperature": 0.3, "top_p": 0.4, "num_predict": 1024},
+                    "stream": False,  # No streaming for translation
+                }
+
+                # Send request to Ollama's native API
+                response = self.session.post(self.api_url, json=payload, timeout=60)
+
+                response.raise_for_status()
+                response_data = response.json()
+
+                if "message" not in response_data:
+                    print(f"Unexpected response format: {response_data}")
+                    raise ValueError("Invalid response format from Ollama API")
 
                 if hash_input(input_data) in CACHE_FAIL_PROMPT:
                     CACHE_FAIL_PROMPT.pop(hash_input(input_data))
+
             except Exception as e:
                 # Handle unavoidable exceptions
                 input_hash = hash_input(input_data)
@@ -259,17 +337,29 @@ class OllamaEngine(BaseEngine):
                 print(f"\nCurrent ollama fail cache: {CACHE_FAIL_PROMPT}\n")
                 raise e
 
-            # Extract translation from response
-            final_result = response.choices[0].message.content
+            # Extract translation from response and log it
+            content = response_data["message"]["content"]
 
-            # Clean the translation output
-            final_result = final_result.replace(prefix_separator, "").replace(
+            # Clean the translation output thoroughly
+            final_result = content.replace(prefix_separator, "").replace(
                 postfix_separator, ""
             )
             final_result = final_result.replace(prefix_prompt_block, "").replace(
                 postfix_prompt_block, ""
             )
             final_result = self.remove_custom_brackets(final_result).strip()
+
+            # Remove any markdown formatting that might be present
+            final_result = re.sub(r"```.*?\n", "", final_result)
+            final_result = re.sub(r"```", "", final_result)
+
+            # Remove any "Translation:" prefix the model might add
+            final_result = re.sub(
+                r"^(Translation|Translated text|Vietnamese):\s*",
+                "",
+                final_result,
+                flags=re.IGNORECASE,
+            )
 
         # Process for repeating suffixes
         try:
@@ -281,7 +371,7 @@ class OllamaEngine(BaseEngine):
                         data, 0.8
                     )
                     if percentage_removed > SUFFIXES_PERCENTAGE and STRICT_TRANSLATION:
-                        final_result = [fail_translation_code, fail_translation_code]
+                        final_result = [fail_translation_code] * len(input_data)
                         break
                     else:
                         cleaned_output.append(
@@ -300,7 +390,7 @@ class OllamaEngine(BaseEngine):
         except Exception as e:
             print(f"\nError in cleaning the translation output: {e}\n")
             if data_type == "list":
-                return [fail_translation_code, fail_translation_code]
+                return [fail_translation_code] * len(input_data)
             return fail_translation_code
 
         return final_result

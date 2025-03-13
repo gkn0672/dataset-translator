@@ -9,7 +9,7 @@ from datasets import load_dataset
 from config.default import DefaultConfig
 from translator.parser import DataParser
 from translator.callback import VerboseCallback
-from engine.groq import GroqEngine
+from engine.ollama import OllamaEngine
 
 
 PARSER_NAME = "MagpieUltraV01"
@@ -30,7 +30,9 @@ class MagpieUltraV01Parser(DataParser):
             ],  # The data fields to be translated (The fields belong to BaseConfig)
             do_translate=True,
             no_translated_code=False,  # Remove any instance of string that appears to be coding language (e.g. Python code, HTML, etc.)
-            translator=GroqEngine,  # Groq is very slow but it is a high quality translator
+            translator=OllamaEngine(
+                model_name="llama3.2:3b-instruct-q8_0"
+            ),  # Groq is very slow but it is a high quality translator
             parser_callbacks=[
                 VerboseCallback
             ],  # The callback to be called after the data has been converted and translated
@@ -64,9 +66,7 @@ class MagpieUltraV01Parser(DataParser):
                 data_converted.append(data_dict)
 
         # Be sure to assign the final data list to self.converted_data
-        self.converted_data = data_converted[
-            :100
-        ]  # 6k examples at a time to avoid tokens limit
+        self.converted_data = data_converted[:100]  # 100 examples for testing purposes
 
         return None
 
