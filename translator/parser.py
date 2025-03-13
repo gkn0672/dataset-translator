@@ -7,7 +7,6 @@ import string
 import sys
 
 sys.path.insert(0, r"./")
-from copy import deepcopy
 
 import threading
 import warnings
