@@ -7,7 +7,7 @@ from pydantic import Field
 
 sys.path.insert(0, r"./")
 from .base import BaseEngine
-from .utils import hash_input, pop_half_dict, create_dynamic_model, throttle
+from .utils import hash_input, pop_half_dict, create_dynamic_model
 from strings import remove_fuzzy_repeating_suffix
 
 # Cache the fail prompt to avoid running translation again for subsequent calls
