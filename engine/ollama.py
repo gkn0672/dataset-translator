@@ -74,11 +74,11 @@ class OllamaEngine(BaseEngine):
         return re.sub(pattern, "", text, flags=re.DOTALL | re.MULTILINE)
 
     @throttle(
-        calls_per_minute=200,
+        calls_per_minute=2000,
         verbose=False,
-        break_interval=1200,
+        break_interval=0,
         break_duration=6,
-        jitter=2,  # Added jitter to spread out requests
+        jitter=0,  # Added jitter to spread out requests
     )
     def _do_translate(
         self,
