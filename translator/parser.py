@@ -21,7 +21,6 @@ from concurrent.futures import ThreadPoolExecutor
 from engine.base import BaseEngine
 from engine.groq import GroqEngine
 from engine.ollama import OllamaEngine
-from engine.vllm import VLLMEngine
 from config.default import DefaultConfig
 from .callback import ParserCallback
 from .preprocessing.utils import (
@@ -177,11 +176,6 @@ class DataParser(metaclass=ForceBaseCallMeta):
         if isinstance(self.translator, OllamaEngine):
             return translator_class(
                 model_name=self.translator.model_name, host=self.translator.host
-            )
-
-        if isinstance(self.translator, VLLMEngine):
-            return translator_class(
-                api_url=self.translator.api_url, model_name=self.translator.model_name
             )
 
         return translator_class()
