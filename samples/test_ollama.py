@@ -36,7 +36,7 @@ class MagpieUltraV01Parser(DataParser):
             parser_callbacks=[
                 VerboseCallback
             ],  # The callback to be called after the data has been converted and translated
-            max_example_per_thread=25,  # Set this to a lower number since a fail translation will cause the whole thread to restart, loosing all the progress of the thread
+            max_example_per_thread=400,  # Set this to a lower number since a fail translation will cause the whole thread to restart, loosing all the progress of the thread
             large_chunks_threshold=3000,
         )
 
@@ -46,7 +46,9 @@ class MagpieUltraV01Parser(DataParser):
         # I just want to be sure that the file path is correct
         super(MagpieUltraV01Parser, self).read()
 
-        self.data_read = load_dataset("argilla/magpie-ultra-v0.1", streaming=True)
+        self.data_read = load_dataset(
+            "STEM-AI-mtl/Electrical-engineering", streaming=True
+        )
 
         return None
 
@@ -61,12 +63,14 @@ class MagpieUltraV01Parser(DataParser):
             for data in tqdm(self.data_read[split], desc=f"Converting {split} data"):
                 data_dict = {}
                 data_dict["qas_id"] = self.id_generator()
-                data_dict["question_text"] = data["instruction"]
-                data_dict["orig_answer_texts"] = data["response"]
+                data_dict["question_text"] = (
+                    data["instruction"] + " Question: " + data["input"]
+                )
+                data_dict["orig_answer_texts"] = data["output"]
                 data_converted.append(data_dict)
 
         # Be sure to assign the final data list to self.converted_data
-        self.converted_data = data_converted[:100]  # 100 examples for testing purposes
+        self.converted_data = data_converted
 
         return None
 

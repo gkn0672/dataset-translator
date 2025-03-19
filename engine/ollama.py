@@ -109,8 +109,8 @@ class OllamaEngine(BaseEngine):
             postfix_system_prompt = f"{self.construct_schema_prompt(Translation.model_json_schema()['properties'])}"
             system_content = system_prompt + "\n\n" + postfix_system_prompt
 
-            prefix_prompt_block = "{|[|{START_TRANSLATION_BLOCK}|]|}"
-            postfix_prompt_block = "{|[|{END_TRANSLATION_BLOCK}|]|}"
+            prefix_prompt_block = "<translation_block>"
+            postfix_prompt_block = "</translation_block>"
             prefix_separator = "=" * 10
             postfix_separator = "=" * 10
 
