@@ -36,7 +36,7 @@ class MagpieUltraV01Parser(DataParser):
             parser_callbacks=[
                 VerboseCallback
             ],  # The callback to be called after the data has been converted and translated
-            max_example_per_thread=400,  # Set this to a lower number since a fail translation will cause the whole thread to restart, loosing all the progress of the thread
+            max_example_per_thread=25,  # Set this to a lower number since a fail translation will cause the whole thread to restart, loosing all the progress of the thread
             large_chunks_threshold=3000,
         )
 
@@ -49,7 +49,6 @@ class MagpieUltraV01Parser(DataParser):
         self.data_read = load_dataset(
             "STEM-AI-mtl/Electrical-engineering", streaming=True
         )
-
         return None
 
     # Convert function must assign data that has been converted to self.converted_data
@@ -70,7 +69,7 @@ class MagpieUltraV01Parser(DataParser):
                 data_converted.append(data_dict)
 
         # Be sure to assign the final data list to self.converted_data
-        self.converted_data = data_converted
+        self.converted_data = data_converted[:100]
 
         return None
 

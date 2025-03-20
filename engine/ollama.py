@@ -3,20 +3,16 @@ import sys
 import json
 import requests
 from typing import Union, List
-from pydantic import Field
 
 sys.path.insert(0, r"./")
 from .base import BaseEngine
-from .utils import hash_input, pop_half_dict, create_dynamic_model
-from strings import remove_fuzzy_repeating_suffix
+from .utils import hash_input, pop_half_dict
+from strings import remove_fuzzy_repeating_suffix, clean_chinese_mix
 
 # Cache the fail prompt to avoid running translation again for subsequent calls
 CACHE_FAIL_PROMPT = {}
 MAX_LIST_RETRIES = 6  # The maximum number of retries for ollama list translation
 MAX_STRING_RETRIES = 3  # The maximum number of retries for ollama string translation
-
-# Cache the init prompt to avoid running translation again for subsequent calls
-CACHE_INIT_PROMPT = {}
 
 # If set to True, the translation will fail if the translation output contains repeating suffixes
 # If set to False, the translation output will be cleaned and repeating suffixes will be removed
@@ -36,6 +32,13 @@ class OllamaEngine(BaseEngine):
     """
 
     def __init__(self, model_name="llama3", host="http://localhost:11434"):
+        """
+        Initialize the Ollama Engine.
+
+        Args:
+            model_name (str): The name of the Ollama model to use
+            host (str): The host URL where Ollama is running
+        """
         super().__init__()
         self.model_name = model_name
         self.host = host
@@ -48,169 +51,119 @@ class OllamaEngine(BaseEngine):
 
         self.translator = self  # Assign self as translator
 
-    @staticmethod
-    def construct_schema_prompt(schema: dict) -> str:
-        schema_prompt = "Please provide the JSON object with the following schema:\n"
-
-        json_prompt = json.dumps(
-            {key: value["description"] for key, value in schema.items()}, indent=2
-        )
-
-        return schema_prompt + json_prompt
-
-    @staticmethod
-    def remove_custom_brackets(text: str) -> str:
-        """
-        Remove leading and trailing custom bracketed expressions from a given text.
-        Custom brackets are defined as {|[|{ and }|]|}.
-
-        Args:
-            text (str): The input string from which custom bracketed expressions should be removed.
-
-        Returns:
-            str: The text with leading and trailing custom bracketed expressions removed.
-        """
-        pattern = r"^\s*\{\|\[\|\{.*?\}\|\]\|\}\s*|\s*\{\|\[\|\{.*?\}\|\]\|\}\s*$"
-        return re.sub(pattern, "", text, flags=re.DOTALL | re.MULTILINE)
-
     def _do_translate(
         self,
         input_data: Union[str, List[str]],
         src: str,
         dest: str,
-        fail_translation_code: str = "P1OP1_F",  # Pass in this code to replace the input_data if the exception is *unavoidable*
+        fail_translation_code: str = "P1OP1_F",
         **kwargs,
     ) -> Union[str, List[str]]:
+        """
+        Perform translation using Ollama API.
+
+        Args:
+            input_data: Text to translate (string or list of strings)
+            src: Source language code
+            dest: Destination language code
+            fail_translation_code: Code to return if translation fails
+
+        Returns:
+            Translated text (string or list of strings)
+        """
         global CACHE_FAIL_PROMPT
         data_type = "list" if isinstance(input_data, list) else "str"
 
+        # Handle input data size limits
         if data_type == "list":
-            translation_fields = {}
-            prompt = ""
-            for i in range(len(input_data)):
-                translation_fields[f"translation_{i}"] = (
-                    str,
-                    Field(..., description=f"The translated text for text_{i}"),
-                )
-                prompt += (
-                    "-" * 10 + f"\n text_{i}: {input_data[i]}\n" + "-" * 10
-                    if len(input_data) > 1
-                    else f"text_{i}: {input_data[i]}\n"
-                )
-
-            Translation = create_dynamic_model("Translation", translation_fields)
-
-            system_prompt = (
-                "You are a skilled translator tasked with converting text from **English** to **Vietnamese**. "
-                "Be mindful not to translate specific items such as names, locations, code snippets, LaTeX, or key phrases. "
-                "Ensure the translation reflects the context for accuracy and natural fluency. "
-                "Your response must consist **only of the translated text** in JSON format."
-            )
-            postfix_system_prompt = f"{self.construct_schema_prompt(Translation.model_json_schema()['properties'])}"
-            system_content = system_prompt + "\n\n" + postfix_system_prompt
-
-            prefix_prompt_block = "<translation_block>"
-            postfix_prompt_block = "</translation_block>"
-            prefix_separator = "=" * 10
-            postfix_separator = "=" * 10
-
-            prefix_prompt = f"{prefix_prompt_block}\n"
-            prefix_prompt += prefix_separator
-            postfix_prompt_text = postfix_separator
-            postfix_prompt_text += f"\n{postfix_prompt_block}"
-
-            user_content = (
-                prefix_prompt
-                + "\n\n"
-                + prompt
-                + "\n\n"
-                + postfix_prompt_text
-                + "\n\n"
-                + "Translate the provided text from **English** to **Vietnamese**, "
-                + "considering the context. DO NOT add extra information or remove any information inside the fields. "
-                + "Return the translated results in the respective fields of the JSON object."
-            )
-
-            # Calculate approximate token count (rough estimate)
-            total_tokens = len((system_content + user_content).split())
-            if total_tokens > 8000:
+            text_length = sum(len(text) for text in input_data)
+            if text_length > 8000:
                 return [fail_translation_code] * len(input_data)
+        elif len(input_data) > 8000:
+            return fail_translation_code
 
-            # Clear the cache if it's too large
-            if len(CACHE_FAIL_PROMPT) > 10000:
-                _, CACHE_FAIL_PROMPT = pop_half_dict(CACHE_FAIL_PROMPT)
+        # Clear cache if too large
+        if len(CACHE_FAIL_PROMPT) > 10000:
+            _, CACHE_FAIL_PROMPT = pop_half_dict(CACHE_FAIL_PROMPT)
 
-            try:
-                # Format messages for the native API
-                messages = [
-                    {"role": "system", "content": system_content},
-                    {"role": "user", "content": user_content},
-                ]
+        try:
+            if data_type == "list":
+                # Create prompt for list translation
+                system_prompt = (
+                    "You are a professional English to Vietnamese translator. Translate accurately while preserving names, "
+                    "locations, code, and technical terms. Respond with only valid JSON in this exact format:"
+                )
 
-                # Prepare payload for Ollama's native API
-                payload = {
-                    "model": self.model_name,
-                    "messages": messages,
-                    "options": {"temperature": 0.3, "top_p": 0.4, "num_predict": 1024},
-                    "stream": False,  # No streaming for translation
-                }
+                # Create JSON schema example
+                json_example = "{\n"
+                for i in range(len(input_data)):
+                    json_example += (
+                        f'  "translation_{i}": "Vietnamese translation of text_{i}",\n'
+                    )
+                json_example = json_example.rstrip(",\n") + "\n}"
 
-                # Send request to Ollama's native API
-                response = self.session.post(self.api_url, json=payload, timeout=60)
+                system_prompt += f"\n\n{json_example}"
 
-                response.raise_for_status()
-                response_data = response.json()
+                # Create user prompt with texts to translate
+                user_prompt = "Translate these texts from English to Vietnamese:\n\n"
+                for i, text in enumerate(input_data):
+                    user_prompt += f"text_{i}: {text}\n\n"
 
-                if "message" not in response_data:
-                    raise ValueError("Invalid response format from Ollama API")
+                user_prompt += "Return only a valid JSON object with the translations."
+            else:
+                # Create prompt for single text translation
+                system_prompt = (
+                    "You are a professional English to Vietnamese translator. Translate accurately while preserving names, "
+                    "locations, code, and technical terms. Respond with ONLY the translation, nothing else."
+                )
 
-                if hash_input(input_data) in CACHE_FAIL_PROMPT:
-                    CACHE_FAIL_PROMPT.pop(hash_input(input_data))
+                # Create user prompt with text to translate
+                user_prompt = (
+                    f"Translate this text from English to Vietnamese:\n\n{input_data}"
+                )
 
-            except Exception as e:
-                # Handle unavoidable exceptions
-                input_hash = hash_input(input_data)
+            # Format messages for Ollama API
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
 
-                if input_hash in CACHE_FAIL_PROMPT:
-                    if CACHE_FAIL_PROMPT[input_hash] >= MAX_LIST_RETRIES:
-                        print(
-                            f"\nUnavoidable exception: {e}\nOllama max retries reached for list translation"
-                        )
-                        return [fail_translation_code] * len(input_data)
-                    else:
-                        CACHE_FAIL_PROMPT[input_hash] += 1
-                else:
-                    CACHE_FAIL_PROMPT[input_hash] = 1
+            # Prepare API payload
+            payload = {
+                "model": self.model_name,
+                "messages": messages,
+                "options": {"temperature": 0.3, "top_p": 0.4, "num_predict": 1024},
+                "stream": False,
+            }
 
-                print(f"\nCurrent ollama fail cache: {CACHE_FAIL_PROMPT}\n")
-                raise e
+            # Send request
+            response = self.session.post(self.api_url, json=payload, timeout=60)
+            response.raise_for_status()
+            response_data = response.json()
 
-            try:
-                # Extract content from Ollama's native API response
-                output_text = response_data["message"]["content"]
-                print(f"Response content (first 200 chars): {output_text[:200]}...")
+            if "message" not in response_data:
+                raise ValueError("Invalid response format from Ollama API")
 
-                # Try multiple strategies to extract translations
+            # Process response
+            output_text = response_data["message"]["content"]
+
+            # Remove hash from fail cache if request succeeded
+            if hash_input(input_data) in CACHE_FAIL_PROMPT:
+                CACHE_FAIL_PROMPT.pop(hash_input(input_data))
+
+            # Process the response based on data type
+            if data_type == "list":
+                # Extract JSON from response (handling potential code blocks)
+                clean_text = output_text.strip()
+                if clean_text.startswith("```json"):
+                    clean_text = clean_text[7:]
+                if clean_text.endswith("```"):
+                    clean_text = clean_text[:-3]
+                clean_text = clean_text.strip()
+
                 try:
-                    # First strategy: clean up and parse JSON
-                    clean_text = output_text.strip()
-                    if clean_text.startswith("```json"):
-                        clean_text = clean_text[7:]
-                    if clean_text.endswith("```"):
-                        clean_text = clean_text[:-3]
-                    clean_text = clean_text.strip()
-
-                    # Try to find a valid JSON block using regex
-                    json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
-                    json_matches = re.findall(json_pattern, clean_text)
-
-                    if json_matches:
-                        print(f"Found potential JSON objects: {len(json_matches)}")
-                        json_text = json_matches[0]
-                        json_data = json.loads(json_text)
-                    else:
-                        # Fallback to direct parsing
-                        json_data = json.loads(clean_text)
+                    # Try to parse the json
+                    json_data = json.loads(clean_text)
 
                     # Extract translations
                     final_result = []
@@ -220,7 +173,8 @@ class OllamaEngine(BaseEngine):
                             final_result.append(json_data[key])
                         else:
                             # Try alternative keys
-                            for alt_key in [f"text_{i}", f"translated_{i}"]:
+                            alt_keys = [f"text_{i}", f"translated_{i}"]
+                            for alt_key in alt_keys:
                                 if alt_key in json_data:
                                     final_result.append(json_data[alt_key])
                                     break
@@ -249,144 +203,93 @@ class OllamaEngine(BaseEngine):
                                 final_result.append(fail_translation_code)
                     else:
                         print("Could not extract translations. Using fail code.")
-                        final_result = [fail_translation_code] * len(input_data)
-            except Exception as e:
-                print(f"Error processing response: {e}")
-                return [fail_translation_code] * len(input_data)
+                        return [fail_translation_code] * len(input_data)
+            else:
+                # Clean single text response
+                final_result = output_text.strip()
 
-        else:
-            # Single string translation - simplified approach
-            system_prompt = (
-                "You are a skilled translator. Translate the following text from English to Vietnamese. "
-                "Keep names, places, code snippets, LaTeX, and key technical terms unchanged. "
-                "Return ONLY the translated text with no explanations, no formatting, and no additional content."
-            )
+                # Remove any markdown formatting
+                if final_result.startswith("```") and final_result.endswith("```"):
+                    final_result = final_result[3:-3].strip()
 
-            prefix_prompt_block = "{|[|{START_TRANSLATION_BLOCK}|]|}"
-            postfix_prompt_block = "{|[|{END_TRANSLATION_BLOCK}|]|}"
-            prefix_separator = "=" * 10
-            postfix_separator = "=" * 10
+                # Remove any prefixes the model might add
+                prefixes = ["Translation:", "Translated text:", "Vietnamese:"]
+                for prefix in prefixes:
+                    if final_result.lower().startswith(prefix.lower()):
+                        final_result = final_result[len(prefix) :].strip()
 
-            user_content = (
-                f"{prefix_prompt_block}\n{prefix_separator}\n\n"
-                f"{input_data}\n\n"
-                f"{postfix_separator}\n{postfix_prompt_block}\n\n"
-                "Translate all the above text inside the translation block from **English** to **Vietnamese**. "
-                "DO NOT add extra information or remove any information inside, just translate."
-            )
-
-            # Approximate token count
-            total_tokens = len((system_prompt + user_content).split())
-            if total_tokens > 8000:
-                return fail_translation_code
-
-            # Clear the cache if it's too large
-            if len(CACHE_FAIL_PROMPT) > 10000:
-                _, CACHE_FAIL_PROMPT = pop_half_dict(CACHE_FAIL_PROMPT)
-
+            # Check for repeating suffixes
             try:
-                # Format messages for Ollama's native API
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ]
-
-                # Prepare payload for Ollama's native API
-                payload = {
-                    "model": self.model_name,
-                    "messages": messages,
-                    "options": {"temperature": 0.3, "top_p": 0.4, "num_predict": 1024},
-                    "stream": False,  # No streaming for translation
-                }
-
-                # Send request to Ollama's native API
-                response = self.session.post(self.api_url, json=payload, timeout=60)
-
-                response.raise_for_status()
-                response_data = response.json()
-
-                if "message" not in response_data:
-                    print(f"Unexpected response format: {response_data}")
-                    raise ValueError("Invalid response format from Ollama API")
-
-                if hash_input(input_data) in CACHE_FAIL_PROMPT:
-                    CACHE_FAIL_PROMPT.pop(hash_input(input_data))
-
-            except Exception as e:
-                # Handle unavoidable exceptions
-                input_hash = hash_input(input_data)
-
-                if input_hash in CACHE_FAIL_PROMPT:
-                    if CACHE_FAIL_PROMPT[input_hash] >= MAX_STRING_RETRIES:
-                        print(
-                            f"\nUnavoidable exception: {e}\nOllama max retries reached for string translation"
+                if data_type == "list":
+                    cleaned_output = []
+                    for data in final_result:
+                        data = clean_chinese_mix(data)
+                        output, percentage_removed = remove_fuzzy_repeating_suffix(
+                            data, 0.8
                         )
-                        return fail_translation_code
-                    else:
-                        CACHE_FAIL_PROMPT[input_hash] += 1
+                        if (
+                            percentage_removed > SUFFIXES_PERCENTAGE
+                            and STRICT_TRANSLATION
+                        ):
+                            return [fail_translation_code] * len(input_data)
+                        else:
+                            cleaned_output.append(
+                                data if KEEP_ORG_TRANSLATION else output
+                            )
+                    final_result = cleaned_output
                 else:
-                    CACHE_FAIL_PROMPT[input_hash] = 1
-
-                print(f"\nCurrent ollama fail cache: {CACHE_FAIL_PROMPT}\n")
-                raise e
-
-            # Extract translation from response and log it
-            content = response_data["message"]["content"]
-
-            # Clean the translation output thoroughly
-            final_result = content.replace(prefix_separator, "").replace(
-                postfix_separator, ""
-            )
-            final_result = final_result.replace(prefix_prompt_block, "").replace(
-                postfix_prompt_block, ""
-            )
-            final_result = self.remove_custom_brackets(final_result).strip()
-
-            # Remove any markdown formatting that might be present
-            final_result = re.sub(r"```.*?\n", "", final_result)
-            final_result = re.sub(r"```", "", final_result)
-
-            # Remove any "Translation:" prefix the model might add
-            final_result = re.sub(
-                r"^(Translation|Translated text|Vietnamese):\s*",
-                "",
-                final_result,
-                flags=re.IGNORECASE,
-            )
-
-        # Process for repeating suffixes
-        try:
-            if data_type == "list":
-                cleaned_output = []
-                for data in final_result:
-                    # Clean the translation output if there is any repeating suffix
                     output, percentage_removed = remove_fuzzy_repeating_suffix(
-                        data, 0.8
+                        final_result, 0.8
                     )
                     if percentage_removed > SUFFIXES_PERCENTAGE and STRICT_TRANSLATION:
-                        final_result = [fail_translation_code] * len(input_data)
-                        break
+                        return fail_translation_code
                     else:
-                        cleaned_output.append(
-                            data
-                        ) if KEEP_ORG_TRANSLATION else cleaned_output.append(output)
-                final_result = cleaned_output
-            else:
-                output, percentage_removed = remove_fuzzy_repeating_suffix(
-                    final_result, 0.8
+                        final_result = final_result if KEEP_ORG_TRANSLATION else output
+            except Exception as e:
+                print(f"\nError in cleaning the translation output: {e}\n")
+                return (
+                    [fail_translation_code] * len(input_data)
+                    if data_type == "list"
+                    else fail_translation_code
                 )
-                if percentage_removed > SUFFIXES_PERCENTAGE and STRICT_TRANSLATION:
-                    final_result = fail_translation_code
-                else:
-                    final_result = final_result if KEEP_ORG_TRANSLATION else output
+
+            return final_result
 
         except Exception as e:
-            print(f"\nError in cleaning the translation output: {e}\n")
-            if data_type == "list":
-                return [fail_translation_code] * len(input_data)
-            return fail_translation_code
+            # Handle unavoidable exceptions
+            input_hash = hash_input(input_data)
 
-        return final_result
+            # Track retry count
+            if input_hash in CACHE_FAIL_PROMPT:
+                if (
+                    data_type == "list"
+                    and CACHE_FAIL_PROMPT[input_hash] >= MAX_LIST_RETRIES
+                ):
+                    print(
+                        f"\nUnavoidable exception: {e}\nOllama max retries reached for list translation"
+                    )
+                    return [fail_translation_code] * len(input_data)
+                elif (
+                    data_type == "str"
+                    and CACHE_FAIL_PROMPT[input_hash] >= MAX_STRING_RETRIES
+                ):
+                    print(
+                        f"\nUnavoidable exception: {e}\nOllama max retries reached for string translation"
+                    )
+                    return fail_translation_code
+                else:
+                    CACHE_FAIL_PROMPT[input_hash] += 1
+            else:
+                CACHE_FAIL_PROMPT[input_hash] = 1
+
+            print(f"\nCurrent ollama fail cache: {CACHE_FAIL_PROMPT}\n")
+            raise e
+
+    def translate(self, input_data, src, dest, fail_translation_code="P1OP1_F"):
+        """
+        Calls the BaseEngine's translate method. This is just a wrapper for clarity.
+        """
+        return super().translate(input_data, src, dest, fail_translation_code)
 
 
 if __name__ == "__main__":

@@ -134,6 +134,7 @@ def code_likelihood_score(text: str) -> Tuple[int, list]:
         "Ruby",
         "regex",
         "println",
+        "variable_name",
     ]
     if text and isinstance(text, str):
         text = (
