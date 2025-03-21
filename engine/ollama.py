@@ -135,8 +135,8 @@ class OllamaEngine(BaseEngine):
                 "options": {
                     "temperature": 0.3,
                     "top_p": 0.4,
-                    "num_predict": 4096,
-                    "context_window": 8000,
+                    "num_predict": 1024,
+                    "num_ctx": 4096,
                 },
                 "stream": False,
             }
