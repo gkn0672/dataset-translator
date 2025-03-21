@@ -7,7 +7,7 @@ from typing import Union, List
 sys.path.insert(0, r"./")
 from .base import BaseEngine
 from .utils import hash_input, pop_half_dict
-from strings import remove_fuzzy_repeating_suffix, clean_chinese_mix
+from strings import clean_chinese_mix
 
 # Cache the fail prompt to avoid running translation again for subsequent calls
 CACHE_FAIL_PROMPT = {}
@@ -132,7 +132,12 @@ class OllamaEngine(BaseEngine):
             payload = {
                 "model": self.model_name,
                 "messages": messages,
-                "options": {"temperature": 0.3, "top_p": 0.4, "num_predict": 1024},
+                "options": {
+                    "temperature": 0.3,
+                    "top_p": 0.4,
+                    "num_predict": 4096,
+                    "context_window": 8000,
+                },
                 "stream": False,
             }
 
@@ -224,27 +229,10 @@ class OllamaEngine(BaseEngine):
                     cleaned_output = []
                     for data in final_result:
                         data = clean_chinese_mix(data)
-                        output, percentage_removed = remove_fuzzy_repeating_suffix(
-                            data, 0.8
-                        )
-                        if (
-                            percentage_removed > SUFFIXES_PERCENTAGE
-                            and STRICT_TRANSLATION
-                        ):
-                            return [fail_translation_code] * len(input_data)
-                        else:
-                            cleaned_output.append(
-                                data if KEEP_ORG_TRANSLATION else output
-                            )
+                        cleaned_output.append(data if KEEP_ORG_TRANSLATION else data)
                     final_result = cleaned_output
                 else:
-                    output, percentage_removed = remove_fuzzy_repeating_suffix(
-                        final_result, 0.8
-                    )
-                    if percentage_removed > SUFFIXES_PERCENTAGE and STRICT_TRANSLATION:
-                        return fail_translation_code
-                    else:
-                        final_result = final_result if KEEP_ORG_TRANSLATION else output
+                    final_result = clean_chinese_mix(final_result)
             except Exception as e:
                 print(f"\nError in cleaning the translation output: {e}\n")
                 return (

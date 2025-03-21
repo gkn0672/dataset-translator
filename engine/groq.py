@@ -9,7 +9,7 @@ sys.path.insert(0, r"./")
 from groq import Groq
 from .base import BaseEngine
 from .utils import hash_input, pop_half_dict, throttle
-from strings import remove_fuzzy_repeating_suffix, clean_chinese_mix
+from strings import clean_chinese_mix
 
 load_dotenv()
 
@@ -222,28 +222,10 @@ class GroqEngine(BaseEngine):
                     cleaned_output = []
                     for data in final_result:
                         data = clean_chinese_mix(data)
-                        output, percentage_removed = remove_fuzzy_repeating_suffix(
-                            data, 0.8
-                        )
-                        if (
-                            percentage_removed > SUFFIXES_PERCENTAGE
-                            and STRICT_TRANSLATION
-                        ):
-                            return [fail_translation_code] * len(input_data)
-                        else:
-                            cleaned_output.append(
-                                data if KEEP_ORG_TRANSLATION else output
-                            )
+                        cleaned_output.append(data if KEEP_ORG_TRANSLATION else output)
                     final_result = cleaned_output
                 else:
                     final_result = clean_chinese_mix(final_result)
-                    output, percentage_removed = remove_fuzzy_repeating_suffix(
-                        final_result, 0.8
-                    )
-                    if percentage_removed > SUFFIXES_PERCENTAGE and STRICT_TRANSLATION:
-                        return fail_translation_code
-                    else:
-                        final_result = final_result if KEEP_ORG_TRANSLATION else output
             except Exception as e:
                 print(f"\nError in cleaning the translation output: {e}\n")
                 return (

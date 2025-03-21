@@ -31,7 +31,7 @@ class MagpieUltraV01Parser(DataParser):
             do_translate=True,
             no_translated_code=False,  # Remove any instance of string that appears to be coding language (e.g. Python code, HTML, etc.)
             translator=OllamaEngine(
-                model_name="llama3.2:3b-instruct-q8_0"
+                model_name="llama3.1:8b-instruct-q6_K"
             ),  # Groq is very slow but it is a high quality translator
             parser_callbacks=[
                 VerboseCallback
