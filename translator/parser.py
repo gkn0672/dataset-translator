@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from engine.base import BaseEngine
 from engine.groq import GroqEngine
 from engine.ollama import OllamaEngine
-from config.default import DefaultConfig
+from config.qa import QAConfig
 from .callback import ParserCallback
 from .preprocessing.utils import (
     timeit,
@@ -44,7 +44,7 @@ class DataParser(metaclass=ForceBaseCallMeta):
         file_path: str,
         output_dir: str,
         parser_name: str,
-        target_config: DefaultConfig,
+        target_config: QAConfig,
         verbose: bool = False,
         target_fields: List[str] = None,
         do_translate: bool = False,

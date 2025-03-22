@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 
 from datasets import load_dataset
 
-from config.default import DefaultConfig
+from config.qa import QAConfig
 from translator.parser import DataParser
 from translator.callback import VerboseCallback
 from engine.ollama import OllamaEngine
@@ -22,7 +22,7 @@ class MagpieUltraV01Parser(DataParser):
             file_path,
             output_path,
             parser_name=PARSER_NAME,
-            target_config=DefaultConfig,  # The data config to be validated to check if self implement "convert" function is correct or not,
+            target_config=QAConfig,  # The data config to be validated to check if self implement "convert" function is correct or not,
             # you must map the data form to the correct fields of the @dataclass in the configs/base_config.py
             target_fields=[
                 "question_text",
@@ -31,7 +31,7 @@ class MagpieUltraV01Parser(DataParser):
             do_translate=True,
             no_translated_code=False,  # Remove any instance of string that appears to be coding language (e.g. Python code, HTML, etc.)
             translator=OllamaEngine(
-                model_name="llama3.1:8b-instruct-q6_K"
+                model_name="llama3.1:8b-instruct-q4_0"
             ),  # Groq is very slow but it is a high quality translator
             parser_callbacks=[
                 VerboseCallback

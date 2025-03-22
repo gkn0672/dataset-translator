@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 
 from datasets import load_dataset
 
-from config.default import DefaultConfig
+from config.qa import QAConfig
 from translator.parser import DataParser
 from translator.callback import VerboseCallback
 from engine.ollama import OllamaEngine
@@ -22,7 +22,7 @@ class MagpieUltraV01Parser(DataParser):
             file_path,
             output_path,
             parser_name=PARSER_NAME,
-            target_config=DefaultConfig,  # The data config to be validated to check if self implement "convert" function is correct or not,
+            target_config=QAConfig,  # The data config to be validated to check if self implement "convert" function is correct or not,
             # you must map the data form to the correct fields of the @dataclass in the configs/base_config.py
             target_fields=[
                 "question_text",
@@ -30,13 +30,11 @@ class MagpieUltraV01Parser(DataParser):
             ],  # The data fields to be translated (The fields belong to BaseConfig)
             do_translate=True,
             no_translated_code=False,  # Remove any instance of string that appears to be coding language (e.g. Python code, HTML, etc.)
-            translator=OllamaEngine(
-                model_name="llama3.1:8b-instruct-q6_K"
-            ),  # Groq is very slow but it is a high quality translator
+            translator=OllamaEngine(model_name="llama3.1:8b-instruct-q4_0"),
             parser_callbacks=[
                 VerboseCallback
             ],  # The callback to be called after the data has been converted and translated
-            max_example_per_thread=25,  # Set this to a lower number since a fail translation will cause the whole thread to restart, loosing all the progress of the thread
+            max_example_per_thread=400,  # Set this to a lower number since a fail translation will cause the whole thread to restart, loosing all the progress of the thread
             large_chunks_threshold=3000,
         )
 
@@ -51,8 +49,6 @@ class MagpieUltraV01Parser(DataParser):
 
     # Convert function must assign data that has been converted to self.converted_data
     def convert(self) -> None:
-        # The convert function must call the convert function in DataParser class
-        # I just want to be sure the read function has actually assigned the self.data_read
         super(MagpieUltraV01Parser, self).convert()
 
         data_converted = []
@@ -67,7 +63,7 @@ class MagpieUltraV01Parser(DataParser):
                 data_converted.append(data_dict)
 
         # Be sure to assign the final data list to self.converted_data
-        self.converted_data = data_converted[:100]
+        self.converted_data = data_converted
 
         return None
 
