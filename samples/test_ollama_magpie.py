@@ -25,8 +25,8 @@ class MagpieUltraV01Parser(DataParser):
             target_config=QAConfig,  # The data config to be validated to check if self implement "convert" function is correct or not,
             # you must map the data form to the correct fields of the @dataclass in the configs/base_config.py
             target_fields=[
-                "question_text",
-                "orig_answer_texts",
+                "question",
+                "answer",
             ],  # The data fields to be translated (The fields belong to BaseConfig)
             do_translate=True,
             no_translated_code=False,  # Remove any instance of string that appears to be coding language (e.g. Python code, HTML, etc.)
@@ -60,8 +60,8 @@ class MagpieUltraV01Parser(DataParser):
             for data in tqdm(self.data_read[split], desc=f"Converting {split} data"):
                 data_dict = {}
                 data_dict["qas_id"] = self.id_generator()
-                data_dict["question_text"] = data["instruction"]
-                data_dict["orig_answer_texts"] = data["response"]
+                data_dict["question"] = data["instruction"]
+                data_dict["answer"] = data["response"]
                 data_converted.append(data_dict)
 
         # Be sure to assign the final data list to self.converted_data
