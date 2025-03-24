@@ -22,14 +22,14 @@ from engine.base import BaseEngine
 from engine.groq import GroqEngine
 from engine.ollama import OllamaEngine
 from config.qa import QAConfig
-from .callback import ParserCallback
-from .preprocessing.utils import (
+from ..callback import ParserCallback
+from ..preprocessing.utils import (
     timeit,
     have_internet,
     safe_tqdm_write,
 )
-from .preprocessing.wrapper import force_super_call, ForceBaseCallMeta, no_args_method
-from .filters import have_code, have_re_code
+from ..preprocessing.wrapper import force_super_call, ForceBaseCallMeta, no_args_method
+from ..filters import have_code, have_re_code
 
 
 if not have_internet(timeout=5):
@@ -38,7 +38,7 @@ if not have_internet(timeout=5):
     )
 
 
-class DataParser(metaclass=ForceBaseCallMeta):
+class BaseParser(metaclass=ForceBaseCallMeta):
     def __init__(
         self,
         file_path: str,
@@ -222,7 +222,7 @@ class DataParser(metaclass=ForceBaseCallMeta):
         flattened_list = []
         for item in nested_list:
             if isinstance(item, list):
-                flattened_list.extend(DataParser.flatten_list(item))
+                flattened_list.extend(BaseParser.flatten_list(item))
             else:
                 flattened_list.append(item)
         return flattened_list

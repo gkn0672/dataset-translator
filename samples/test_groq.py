@@ -7,7 +7,7 @@ from tqdm.auto import tqdm
 from datasets import load_dataset
 
 from config.qa import QAConfig
-from translator.parser import DataParser
+from translator.parser.base import BaseParser
 from translator.callback import VerboseCallback
 from engine.groq import GroqEngine
 
@@ -16,7 +16,7 @@ PARSER_NAME = "MagpieUltraV01"
 
 
 # Patience is the key since the data is large and is using an LLM based translator
-class MagpieUltraV01Parser(DataParser):
+class MagpieUltraV01Parser(BaseParser):
     def __init__(self, file_path: str, output_path: str):
         super().__init__(
             file_path,
