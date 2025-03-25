@@ -15,6 +15,8 @@ if __name__ == "__main__":
         field_mappings={
             "question": "instruction",
             "answer": "response",
+            "intention": "intent",
+            "context": "knowledge",
         },
         target_config=QAConfig,
         do_translate=True,

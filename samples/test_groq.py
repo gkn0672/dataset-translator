@@ -1,4 +1,3 @@
-# TODO: experiment with data read with stream mode
 import sys
 
 sys.path.insert(0, r"./")
@@ -28,8 +27,8 @@ class MagpieUltraV01Parser(BaseParser):
                 "answer",
             ],
             do_translate=True,
-            no_translated_code=False,  # Remove any instance of string that appears to be coding language (e.g. Python code, HTML, etc.)
-            translator=GroqEngine(),  # Groq is very slow but it is a high quality translator
+            no_translated_code=False,
+            translator=GroqEngine(),
             parser_callbacks=[VerboseCallback],
             max_example_per_thread=25,
             large_chunks_threshold=3000,
@@ -56,7 +55,6 @@ class MagpieUltraV01Parser(BaseParser):
                 data_dict["answer"] = data["response"]
                 data_converted.append(data_dict)
 
-        # Be sure to assign the final data list to self.converted_data
         self.converted_data = data_converted[:100]  # 100 examples for testing purposes
 
         return None

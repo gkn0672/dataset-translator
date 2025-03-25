@@ -1,4 +1,3 @@
-# TODO: experiment with data read with stream mode
 import sys
 
 sys.path.insert(0, r"./")
@@ -22,19 +21,16 @@ class MagpieUltraV01Parser(BaseParser):
             file_path,
             output_path,
             parser_name=PARSER_NAME,
-            target_config=QAConfig,  # The data config to be validated to check if self implement "convert" function is correct or not,
-            # you must map the data form to the correct fields of the @dataclass in the configs/base_config.py
+            target_config=QAConfig,
             target_fields=[
                 "question",
                 "answer",
-            ],  # The data fields to be translated (The fields belong to BaseConfig)
+            ],
             do_translate=True,
-            no_translated_code=False,  # Remove any instance of string that appears to be coding language (e.g. Python code, HTML, etc.)
+            no_translated_code=False,
             translator=OllamaEngine(model_name="llama3.1:8b-instruct-q4_0"),
-            parser_callbacks=[
-                VerboseCallback
-            ],  # The callback to be called after the data has been converted and translated
-            max_example_per_thread=400,  # Set this to a lower number since a fail translation will cause the whole thread to restart, loosing all the progress of the thread
+            parser_callbacks=[VerboseCallback],
+            max_example_per_thread=400,
             large_chunks_threshold=3000,
         )
 
