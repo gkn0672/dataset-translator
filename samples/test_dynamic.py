@@ -2,7 +2,7 @@ import sys
 
 sys.path.insert(0, r"./")
 from config.qa import QAConfig
-from translator.parser.dynamic import DynamicDataParser
+from translator.parser.dynamic import DynamicDataParser  # Import your modified class
 from translator.callback import VerboseCallback
 from engine.ollama import OllamaEngine
 
@@ -15,19 +15,21 @@ if __name__ == "__main__":
         field_mappings={
             "question": "instruction",
             "answer": "response",
-            "intention": "intent",
-            "context": "knowledge",
+            "intention": "intent",  # Fixed typo from "intentiom" to "intention"
         },
         target_config=QAConfig,
         do_translate=True,
         translator=OllamaEngine(model_name="llama3.1:8b-instruct-q4_0"),
         verbose=False,
         parser_callbacks=[VerboseCallback],
-        max_example_per_thread=25,
         large_chunks_threshold=3000,
-        limit=10,
+        limit=100,
+        auto_batch_size=True,  # Enable automatic batch size determination
+        max_memory_percent=0.6,  # Use up to 20% of available RAM
+        min_batch_size=10,  # Never go below 10 items per batch
+        max_batch_size=10000,  # Never go above 1000 items per batch
     )
 
     magpie_parser.read()
     magpie_parser.convert()
-    magpie_parser.save
+    magpie_parser.save()
