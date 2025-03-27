@@ -20,11 +20,11 @@ if __name__ == "__main__":
         target_config=QAConfig,
         do_translate=True,
         translator=OllamaEngine(model_name="llama3.1:8b-instruct-q4_0"),
-        verbose=False,
+        verbose=True,
         parser_callbacks=[VerboseCallback],
         large_chunks_threshold=3000,
-        limit=100,
-        auto_batch_size=True,  # Enable automatic batch size determination
+        limit=125,
+        auto_batch_size=False,  # Enable automatic batch size determination
         max_memory_percent=0.6,  # Use up to 20% of available RAM
         min_batch_size=10,  # Never go below 10 items per batch
         max_batch_size=10000,  # Never go above 1000 items per batch
