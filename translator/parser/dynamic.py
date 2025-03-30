@@ -18,6 +18,8 @@ from translator.parser.utils.memory import (
 from translator.parser.utils.translation import translate_batch
 from translator.parser.utils.batch import BatchProcessor
 
+from translator.preprocessing.utils import get_dataset_info
+
 
 class DynamicDataParser(BaseParser):
     def __init__(
@@ -93,8 +95,13 @@ class DynamicDataParser(BaseParser):
             restore_target_config(
                 target_config, self._original_get_keys, self._original_annotations
             )
+        # TODO: get dataset info here and save the number of rows to calculate the correct batch size
 
         self.dataset_name = dataset_name
+        if not self.file_path:
+            self.total_record = get_dataset_info(dataset_name, api_token=None).get(
+                "total_examples", 0
+            )
         self.field_mappings = field_mappings
         self.additional_fields = additional_fields
         self.limit = limit
@@ -104,7 +111,6 @@ class DynamicDataParser(BaseParser):
         self.min_batch_size = min_batch_size
         self.max_batch_size = max_batch_size
         self.processed_count = 0
-        self.current_batch = []
         self.sample_size = 0
         self.item_memory_estimate = None
 

@@ -682,7 +682,10 @@ class BaseParser(metaclass=ForceBaseCallMeta):
     @abstractmethod
     @force_super_call
     def read(self) -> Union[List, Dict, None]:
-        assert os.path.isfile(self.file_path), f"Invalid path file for {self.file_path}"
+        if self.file_path is not None:
+            assert os.path.isfile(self.file_path), (
+                f"Invalid path file for {self.file_path}"
+            )
 
         if self.parser_callbacks:
             for callback in self.parser_callbacks:
