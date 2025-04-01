@@ -12,7 +12,7 @@ import threading
 import warnings
 import traceback
 from httpcore._exceptions import ConnectTimeout
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 from abc import abstractmethod
 from tqdm.auto import tqdm
 
@@ -41,7 +41,7 @@ if not have_internet(timeout=5):
 class BaseParser(metaclass=ForceBaseCallMeta):
     def __init__(
         self,
-        file_path: str,
+        file_path: Optional[str],
         output_dir: str,
         parser_name: str,
         target_config: QAConfig,

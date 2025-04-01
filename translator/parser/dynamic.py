@@ -24,7 +24,7 @@ from translator.preprocessing.utils import get_dataset_info
 class DynamicDataParser(BaseParser):
     def __init__(
         self,
-        file_path: str,
+        file_path: Optional[str],
         output_path: str,
         dataset_name: str,
         field_mappings: dict,
@@ -95,9 +95,9 @@ class DynamicDataParser(BaseParser):
             restore_target_config(
                 target_config, self._original_get_keys, self._original_annotations
             )
-        # TODO: get dataset info here and save the number of rows to calculate the correct batch size
 
         self.dataset_name = dataset_name
+        # TODO: add support for local files
         if not self.file_path:
             self.total_record = get_dataset_info(dataset_name, api_token=None).get(
                 "total_examples", 0
@@ -271,6 +271,10 @@ class DynamicDataParser(BaseParser):
             self.min_batch_size,
             self.max_batch_size,
             parser_callbacks=self.parser_callbacks,
+            total_records=getattr(
+                self, "total_record", None
+            ),  # Pass the total_record if available
+            limit=getattr(self, "limit", None),
         )
 
         # Process and save the data using the fresh generator

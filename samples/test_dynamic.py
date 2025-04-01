@@ -9,7 +9,7 @@ from engine.ollama import OllamaEngine
 
 if __name__ == "__main__":
     magpie_parser = DynamicDataParser(
-        file_path="./samples/dummy.txt",
+        file_path=None,
         output_path="./samples/out",
         dataset_name="argilla/magpie-ultra-v0.1",
         field_mappings={
