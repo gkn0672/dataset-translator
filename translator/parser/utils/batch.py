@@ -6,7 +6,8 @@ import time
 import psutil
 import math
 from tqdm.auto import tqdm
-from typing import List, Optional, Callable, Any
+from typing import List, Optional, Callable, Any, Dict, Iterator, Generator
+from queue import Queue, Empty
 
 
 class BatchProcessor:
@@ -73,6 +74,7 @@ class BatchProcessor:
         self.file_lock = threading.Lock()
         self.memory_lock = threading.Lock()
         self.stats_lock = threading.Lock()
+        self.batch_queue_lock = threading.Lock()
 
         # Memory tracking
         self.memory_high_water_mark = 0.0
@@ -91,9 +93,17 @@ class BatchProcessor:
 
         # Status monitoring
         self.stop_monitor = threading.Event()
+        self.processing_complete = threading.Event()
 
         # Calculate optimal batch distribution based on worker count
         self._calculate_worker_based_distribution()
+
+        # Batch queue for workers
+        self.batch_queue = Queue(
+            maxsize=self.num_workers * 2
+        )  # Buffer 2 batches per worker
+        self.active_workers = 0
+        self.workers_lock = threading.Lock()
 
     def _calculate_worker_based_distribution(self):
         """
@@ -130,7 +140,7 @@ class BatchProcessor:
         total_batches = math.ceil(self.total_records / self.worker_batch_size)
         batches_per_worker = total_batches / self.num_workers
 
-        print(f"📦 Will create {total_batches} batches total")
+        print(f"📦 Will create ~{total_batches} batches total")
         print(f"📦 Each worker will process ~{batches_per_worker:.2f} batches")
 
         # Use this as our target batch size
@@ -270,8 +280,46 @@ class BatchProcessor:
             # Release memory regardless of success or failure
             self.update_memory_usage(batch_size_bytes, is_increase=False)
 
+    def worker_thread(self, process_func, progress_bar):
+        """Worker thread that processes batches from the queue"""
+        with self.workers_lock:
+            self.active_workers += 1
+
+        try:
+            while not self.stop_monitor.is_set():
+                try:
+                    # Get batch from queue, with a timeout to regularly check if we should stop
+                    batch_info = self.batch_queue.get(timeout=0.5)
+                    if batch_info is None:  # Sentinel value indicating no more work
+                        self.batch_queue.task_done()
+                        break
+
+                    batch, batch_num = batch_info
+
+                    # Process the batch
+                    items_processed = self.process_batch(batch, batch_num, process_func)
+
+                    # Update progress
+                    progress_bar.update(items_processed)
+
+                    # Mark task as done
+                    self.batch_queue.task_done()
+
+                except Empty:
+                    # Queue is empty, check if producer is finished
+                    if self.processing_complete.is_set():
+                        break
+                    # Otherwise, just continue waiting
+                    continue
+        finally:
+            with self.workers_lock:
+                self.active_workers -= 1
+
     def process_and_save(
-        self, data_generator, process_func: Callable, limit: Optional[int] = None
+        self,
+        data_generator: Iterator,
+        process_func: Callable,
+        limit: Optional[int] = None,
     ):
         """
         Process and save a dataset in batches
@@ -289,64 +337,66 @@ class BatchProcessor:
         monitor_thread = threading.Thread(target=self._memory_monitor, daemon=True)
         monitor_thread.start()
 
-        # Collect all data into batches first (to ensure even distribution)
-        all_items = []
-        items_collected = 0
-        for item in data_generator:
-            all_items.append(item)
-            items_collected += 1
+        # Start worker threads
+        workers = []
+        for _ in range(self.num_workers):
+            worker = threading.Thread(
+                target=self.worker_thread,
+                args=(process_func, progress_bar),
+                daemon=True,
+            )
+            worker.start()
+            workers.append(worker)
 
-            if limit and items_collected >= limit:
-                break
-
-        print(f"📊 Collected {len(all_items)} items total")
-
-        # Process data in batches using ThreadPoolExecutor
+        # Process data in batches, streaming directly to worker queue
         try:
-            # Divide the data into worker-sized batches
-            total_items = len(all_items)
-            batches = []
+            batch_num = 0
+            items_collected = 0
+            current_batch = []
+            current_batch_size = self.current_batch_size
 
-            # If we don't have enough items for all workers, just make smaller batches
-            if total_items < self.num_workers:
-                # One item per batch
-                for i in range(total_items):
-                    batches.append([all_items[i]])
-            else:
-                # Use our calculated worker batch size
-                batch_size = self.worker_batch_size
-                for i in range(0, total_items, batch_size):
-                    end_idx = min(i + batch_size, total_items)
-                    batches.append(all_items[i:end_idx])
+            # Fill batch queue with work
+            for item in data_generator:
+                current_batch.append(item)
+                items_collected += 1
 
-            print(f"📦 Created {len(batches)} batches for processing")
-            for i, batch in enumerate(batches):
-                print(f"📦 Batch {i} size: {len(batch)} items")
-                self.batch_sizes.append(len(batch))
+                # If we've reached the batch size or the limit, process the batch
+                if len(current_batch) >= current_batch_size:
+                    # Put batch in queue for processing (blocks if queue is full)
+                    self.batch_queue.put((current_batch, batch_num))
 
-            # Process batches using thread pool
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=self.num_workers
-            ) as executor:
-                futures = []
+                    self.batch_sizes.append(len(current_batch))
+                    batch_num += 1
 
-                # Submit all batches for processing
-                for batch_num, batch in enumerate(batches):
-                    if batch:  # Skip empty batches
-                        future = executor.submit(
-                            self.process_batch, batch, batch_num, process_func
-                        )
-                        futures.append(future)
+                    # Start a new batch
+                    current_batch = []
 
-                print(f"⏳ Waiting for {len(futures)} batches to complete...")
+                    # Adjust batch size if necessary (based on memory pressure)
+                    current_batch_size = self.current_batch_size
 
-                # Wait for all futures to complete
-                for future in concurrent.futures.as_completed(futures):
-                    try:
-                        items_processed = future.result()
-                        progress_bar.update(items_processed)
-                    except Exception as e:
-                        print(f"Error processing batch: {str(e)}")
+                # Check if we've reached the limit
+                if limit and items_collected >= limit:
+                    break
+
+            # Process any remaining items
+            if current_batch:
+                self.batch_queue.put((current_batch, batch_num))
+                self.batch_sizes.append(len(current_batch))
+
+            # Signal that we're done producing batches
+            self.processing_complete.set()
+
+            # Add sentinel values to queue to signal workers to stop
+            for _ in range(self.num_workers):
+                self.batch_queue.put(None)
+
+            # Wait for all queued work to be processed
+            self.batch_queue.join()
+
+            # Wait for all workers to finish
+            for worker in workers:
+                worker.join(timeout=1.0)
+
         finally:
             # Stop memory monitor
             self.stop_monitor.set()
@@ -357,7 +407,7 @@ class BatchProcessor:
 
         # Print batch distribution statistics
         if self.batch_sizes:
-            print(f"\n📊 Batch size statistics:")
+            print("\n📊 Batch size statistics:")
             print(f"  - Number of batches: {len(self.batch_sizes)}")
             print(
                 f"  - Average batch size: {sum(self.batch_sizes) / len(self.batch_sizes):.1f}"
@@ -367,7 +417,7 @@ class BatchProcessor:
 
         # Print worker utilization statistics
         if self.worker_stats:
-            print(f"\n🧵 Worker utilization statistics:")
+            print("\n🧵 Worker utilization statistics:")
             active_workers = len(self.worker_stats)
             print(f"  - Active workers: {active_workers}/{self.num_workers}")
 
