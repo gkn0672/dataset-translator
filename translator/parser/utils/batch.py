@@ -1,13 +1,13 @@
 import os
 import json
 import threading
-import concurrent.futures
 import time
 import psutil
 import math
 from tqdm.auto import tqdm
-from typing import List, Optional, Callable, Any, Dict, Iterator, Generator
+from typing import List, Optional, Callable, Any, Iterator
 from queue import Queue, Empty
+from translator.preprocessing.utils import timeit
 
 
 class BatchProcessor:
@@ -245,11 +245,6 @@ class BatchProcessor:
         # Get current thread ID for tracking
         worker_id = threading.get_ident()
 
-        # Log batch assignment
-        print(
-            f"🧵 Worker {worker_id % 1000} processing Batch {batch_num} ({len(batch)} items)"
-        )
-
         batch_size_bytes = len(batch) * self.item_memory_estimate
         # Register memory usage for this batch
         self.update_memory_usage(batch_size_bytes, is_increase=True)
@@ -315,6 +310,7 @@ class BatchProcessor:
             with self.workers_lock:
                 self.active_workers -= 1
 
+    @timeit
     def process_and_save(
         self,
         data_generator: Iterator,

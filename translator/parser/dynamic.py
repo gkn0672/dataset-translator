@@ -116,13 +116,33 @@ class DynamicDataParser(BaseParser):
 
     def read(self) -> None:
         """
-        Read data from the specified dataset.
+        Read data from the specified dataset or local JSON files.
         """
         super(DynamicDataParser, self).read()
-        try:
-            self.data_read = load_dataset(self.dataset_name, streaming=True)
-        except Exception as e:
-            raise RuntimeError(f"Error loading dataset '{self.dataset_name}': {str(e)}")
+
+        # If file_path is provided, read from local JSON files
+        if self.file_path:
+            try:
+                from translator.reader.json import get_json_reader
+
+                # Get dataset from JSON files
+                self.data_read = get_json_reader(
+                    self.file_path, recursive=True, verbose=self.verbose
+                )
+
+            except Exception as e:
+                raise RuntimeError(
+                    f"Error reading JSON files from '{self.file_path}': {str(e)}"
+                )
+        else:
+            # Use Hugging Face dataset loading when file_path is None
+            try:
+                self.data_read = load_dataset(self.dataset_name, streaming=True)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Error loading dataset '{self.dataset_name}': {str(e)}"
+                )
+
         return None
 
     def convert(self) -> None:
