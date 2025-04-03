@@ -683,7 +683,7 @@ class BaseParser(metaclass=ForceBaseCallMeta):
     @force_super_call
     def read(self) -> Union[List, Dict, None]:
         if self.file_path is not None:
-            assert os.path.isfile(self.file_path), (
+            assert os.path.isdir(self.file_path), (
                 f"Invalid path file for {self.file_path}"
             )
 

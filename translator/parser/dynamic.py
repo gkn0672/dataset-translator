@@ -19,6 +19,7 @@ from translator.parser.utils.translation import translate_batch
 from translator.parser.utils.batch import BatchProcessor
 
 from translator.preprocessing.utils import get_dataset_info
+from translator.reader.utils import count_local_records_json
 
 
 class DynamicDataParser(BaseParser):
@@ -70,10 +71,12 @@ class DynamicDataParser(BaseParser):
 
         # Store the fields to translate for later use
         self.fields_to_translate = translate_fields
-
-        parser_name = (
-            dataset_name.split("/")[-1] if "/" in dataset_name else dataset_name
-        )
+        if dataset_name:
+            parser_name = (
+                dataset_name.split("/")[-1] if "/" in dataset_name else dataset_name
+            )
+        else:
+            parser_name = "Local"
 
         # The key fix: temporarily modify the target_config to support additional fields
         self._original_get_keys, self._original_annotations = patch_target_config(
@@ -101,6 +104,10 @@ class DynamicDataParser(BaseParser):
         if not self.file_path:
             self.total_record = get_dataset_info(dataset_name, api_token=None).get(
                 "total_examples", 0
+            )
+        else:
+            self.total_record = count_local_records_json(
+                file_path, recursive=True, verbose=True
             )
         self.field_mappings = field_mappings
         self.additional_fields = additional_fields
