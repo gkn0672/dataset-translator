@@ -6,5 +6,6 @@ __pycache__/
 .env.*
 !*.env.example
 out/
+in/
 *.gguf
 notebook/

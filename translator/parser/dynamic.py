@@ -19,7 +19,7 @@ from translator.parser.utils.translation import translate_batch
 from translator.parser.utils.batch import BatchProcessor
 
 from translator.preprocessing.utils import get_dataset_info
-from translator.reader.utils import count_local_records_json
+from translator.file.reader import get_reader, count_records
 
 
 class DynamicDataParser(BaseParser):
@@ -39,6 +39,7 @@ class DynamicDataParser(BaseParser):
         max_memory_percent: float = 0.2,
         min_batch_size: int = 10,
         max_batch_size: int = 5000,
+        file_type: Optional[str] = None,
         **parser_kwargs,
     ):
         """
@@ -100,14 +101,14 @@ class DynamicDataParser(BaseParser):
             )
 
         self.dataset_name = dataset_name
-        # TODO: add support for local files
+        self.file_type = file_type
         if not self.file_path:
             self.total_record = get_dataset_info(dataset_name, api_token=None).get(
                 "total_examples", 0
             )
         else:
-            self.total_record = count_local_records_json(
-                file_path, recursive=True, verbose=True
+            self.total_record = count_records(
+                file_path, file_type=file_type, recursive=True, verbose=True
             )
         self.field_mappings = field_mappings
         self.additional_fields = additional_fields
@@ -123,23 +124,23 @@ class DynamicDataParser(BaseParser):
 
     def read(self) -> None:
         """
-        Read data from the specified dataset or local JSON files.
+        Read data from the specified dataset or local files.
         """
         super(DynamicDataParser, self).read()
 
-        # If file_path is provided, read from local JSON files
+        # If file_path is provided, read from local files
         if self.file_path:
             try:
-                from translator.reader.json import get_json_reader
-
-                # Get dataset from JSON files
-                self.data_read = get_json_reader(
-                    self.file_path, recursive=True, verbose=self.verbose
+                # Use the unified reader that automatically handles different file types
+                self.data_read = get_reader(
+                    self.file_path,
+                    file_type=self.file_type,  # Will be used if specified, otherwise auto-detected
+                    recursive=True,
+                    verbose=self.verbose,
                 )
-
             except Exception as e:
                 raise RuntimeError(
-                    f"Error reading JSON files from '{self.file_path}': {str(e)}"
+                    f"Error reading files from '{self.file_path}': {str(e)}"
                 )
         else:
             # Use Hugging Face dataset loading when file_path is None
@@ -258,6 +259,7 @@ class DynamicDataParser(BaseParser):
             )
 
         # Determine batch size if needed - using a separate generator for sampling
+        # TODO: remove auto_batch_size parameter in the future
         if self.auto_batch_size and self.batch_size is None:
             try:
                 # Use a separate generator instance for sampling

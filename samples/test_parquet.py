@@ -9,14 +9,13 @@ from engine.ollama import OllamaEngine
 
 if __name__ == "__main__":
     magpie_parser = DynamicDataParser(
-        file_path=r"samples/in/json_test",
+        file_path=r"samples/in/parquet_test",
         output_path="./samples/out",
         # dataset_name="argilla/magpie-ultra-v0.1",
         dataset_name=None,
         field_mappings={
-            "question": "question",
-            "answer": "answer",
-            "intention": "intention",  # Fixed typo from "intentiom" to "intention"
+            "question": "sql_prompt",
+            "answer": "sql",
         },
         target_config=QAConfig,
         do_translate=True,
@@ -25,10 +24,10 @@ if __name__ == "__main__":
         parser_callbacks=[VerboseCallback],
         large_chunks_threshold=3000,
         limit=None,
-        auto_batch_size=False,  # Enable automatic batch size determination
+        auto_batch_size=True,  # Enable automatic batch size determination
         max_memory_percent=0.6,  # Use up to 20% of available RAM
         min_batch_size=1,  # Never go below 10 items per batch
-        max_batch_size=5,  # Never go above 1000 items per batch
+        max_batch_size=10000,  # Never go above 1000 items per batch
     )
 
     magpie_parser.read()
