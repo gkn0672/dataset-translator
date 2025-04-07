@@ -22,7 +22,7 @@ from engine.base import BaseEngine
 from engine.groq import GroqEngine
 from engine.ollama import OllamaEngine
 from config.qa import QAConfig
-from ..callback import ParserCallback
+from ..callback.base import BaseCallback
 from ..preprocessing.utils import (
     timeit,
     have_internet,
@@ -63,7 +63,7 @@ class BaseParser(metaclass=ForceBaseCallMeta):
         fail_translation_code: str = "P1OP1_F",  # Fail code for *expected* fail translation and can be removed
         # post-translation,
         parser_callbacks: List[
-            ParserCallback
+            BaseCallback
         ] = None,  # Callback function to be called after each step of the parser
     ) -> None:
         """
@@ -87,7 +87,7 @@ class BaseParser(metaclass=ForceBaseCallMeta):
             source_lang (str, optional): The source language. Defaults to "en".
             target_lang (str, optional): The target language. Defaults to "vi".
             fail_translation_code (str, optional): The fail code for expected fail translation. Defaults to "P1OP1_F".
-            parser_callbacks (List[ParserCallback], optional): The callback function to be called after each step of the parser. Defaults to None.
+            parser_callbacks (List[BaseCallback], optional): The callback function to be called after each step of the parser. Defaults to None.
         """
         self.parser_name = parser_name
         self.parser_callbacks = parser_callbacks
@@ -99,7 +99,7 @@ class BaseParser(metaclass=ForceBaseCallMeta):
             )
             self.parser_callbacks = [callback() for callback in self.parser_callbacks]
             for callback in self.parser_callbacks:
-                assert isinstance(callback, ParserCallback), (
+                assert isinstance(callback, BaseCallback), (
                     "Please provide a valid callback function!"
                 )
                 callback.on_start_init(self)
