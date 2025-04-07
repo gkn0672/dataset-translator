@@ -1,4 +1,7 @@
-class HuggingFaceCallback:
+from translator.callback.base import BaseCallback
+
+
+class HuggingFaceCallback(BaseCallback):
     def on_finish_save_converted(self, instance):
         """
         Called when the parser has finished saving
