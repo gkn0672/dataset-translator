@@ -1,10 +1,11 @@
 from translator.callback.base import BaseCallback
+from translator.parser.dynamic import DynamicDataParser
 from huggingface_hub import HfApi, create_repo
 import os
 
 
 class HuggingFaceCallback(BaseCallback):
-    def on_finish_save_translated(self, instance):
+    def on_finish_save_translated(self, instance: DynamicDataParser):
         """
         Called when the parser has finished saving the translated data.
         Uploads the translated dataset to Hugging Face Hub.
