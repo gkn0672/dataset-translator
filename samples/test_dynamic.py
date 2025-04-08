@@ -11,8 +11,8 @@ if __name__ == "__main__":
     magpie_parser = DynamicDataParser(
         file_path=r"samples/in/json_test",
         output_path="./samples/out",
-        # dataset_name="argilla/magpie-ultra-v0.1",
-        dataset_name=None,
+        dataset_name="argilla/magpie-ultra-v0.1",
+        # dataset_name=None,
         field_mappings={
             "question": "question",
             "answer": "answer",
