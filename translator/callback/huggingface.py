@@ -1,7 +1,6 @@
 from translator.callback.base import BaseCallback
 from huggingface_hub import HfApi, create_repo
 import os
-import json
 
 
 class HuggingFaceCallback(BaseCallback):
