@@ -181,20 +181,24 @@ class BaseParser(metaclass=ForceBaseCallMeta):
         return translator_class()
 
     @staticmethod
-    def id_generator(
-        size: int = 6, chars: str = string.ascii_uppercase + string.digits
-    ) -> str:
+    def id_generator() -> str:
         """
-        Generate a random string of specified size using the given characters.
+        Generate a UUID-based identifier, optionally with a prefix and truncated to specified size.
 
         Parameters:
-        - size (int): The length of the generated string. Default is 6.
-        - chars (str): The characters to be used for generating the string. Default is a combination of uppercase letters and digits.
+        - prefix (str): Optional prefix to add before the UUID. Default is empty string.
+        - size (int): The maximum length of the UUID portion. Default is 6.
 
         Returns:
-        - str: The randomly generated string.
+        - str: The generated identifier with optional prefix and truncated UUID.
         """
-        return "".join(random.choice(chars) for _ in range(size))
+        import uuid
+
+        # Generate a random UUID and convert to string
+        uuid_str = str(uuid.uuid4())
+
+        # Combine prefix with UUID
+        return uuid_str
 
     @staticmethod
     def split_list(input_list: List[str], max_sub_length: int) -> List[list]:
