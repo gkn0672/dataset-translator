@@ -4,6 +4,7 @@ sys.path.insert(0, r"./")
 from config.qa import QAConfig
 from translator.parser.dynamic import DynamicDataParser  # Import your modified class
 from translator.callback.verbose import VerboseCallback
+from translator.callback.huggingface import HuggingFaceCallback
 from engine.ollama import OllamaEngine
 
 
@@ -22,7 +23,7 @@ if __name__ == "__main__":
         do_translate=True,
         translator=OllamaEngine(model_name="llama3.1:8b-instruct-q4_0"),
         verbose=True,
-        parser_callbacks=[VerboseCallback],
+        parser_callbacks=[VerboseCallback, HuggingFaceCallback],
         large_chunks_threshold=3000,
         limit=10,
         auto_batch_size=False,  # Enable automatic batch size determination

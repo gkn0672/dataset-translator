@@ -20,6 +20,7 @@ from translator.parser.utils.batch import BatchProcessor
 
 from translator.preprocessing.utils import get_dataset_info
 from translator.file.reader import get_reader, count_records
+from translator.callback.base import BaseCallback
 
 
 class DynamicDataParser(BaseParser):
@@ -40,6 +41,7 @@ class DynamicDataParser(BaseParser):
         min_batch_size: int = 10,
         max_batch_size: int = 5000,
         file_type: Optional[str] = None,
+        parser_callbacks: List[BaseCallback] = None,
         **parser_kwargs,
     ):
         """
@@ -92,6 +94,7 @@ class DynamicDataParser(BaseParser):
                 target_config=target_config,
                 target_fields=translate_fields,
                 do_translate=do_translate,
+                parser_callbacks=parser_callbacks,
                 **parser_kwargs,
             )
         finally:
@@ -320,3 +323,6 @@ class DynamicDataParser(BaseParser):
         Process and save the data incrementally.
         """
         self.process_and_save()
+        if self.parser_callbacks:
+            for callback in self.parser_callbacks:
+                callback.on_finish_save_translated(self)

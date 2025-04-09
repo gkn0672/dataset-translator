@@ -1,7 +1,8 @@
 from translator.callback.base import BaseCallback
 from translator.parser.dynamic import DynamicDataParser
-from huggingface_hub import HfApi, create_repo
+from huggingface_hub import HfApi, create_repo, whoami
 import os
+import yaml
 
 
 class HuggingFaceCallback(BaseCallback):
@@ -22,20 +23,46 @@ class HuggingFaceCallback(BaseCallback):
             )
             return
 
-        # Get HF username from environment
-        hf_username = os.environ.get("HF_USERNAME")
-        if not hf_username:
-            print(
-                "⚠️ No Hugging Face username found in environment. Please set HF_USERNAME environment variable."
-            )
-            return
-
         # Initialize the HF API
         api = HfApi(token=hf_token)
 
+        # Validate token before proceeding
+        try:
+            user_info = whoami(token=hf_token)
+            hf_username = user_info.get("name")
+
+            # Debug info
+            print(f"Debug - User info: {user_info}")
+
+            # Check if token has write permission
+            # The role field can be either a string or a list depending on the API version
+            token_role = user_info.get("auth", {}).get("accessToken", {}).get("role")
+            has_write_access = False
+
+            if isinstance(token_role, list):
+                has_write_access = "write" in token_role
+            elif isinstance(token_role, str):
+                has_write_access = token_role == "write"
+
+            if not has_write_access:
+                print("❌ Token does not have write permission")
+                print("⚠️ Your token can only read repositories but not write to them.")
+                print(
+                    "⚠️ Generate a new token with write access at: https://huggingface.co/settings/tokens"
+                )
+                return
+
+            print(f"✅ Authenticated as: {hf_username} with write permissions")
+        except Exception as e:
+            print(f"❌ Authentication error: {str(e)}")
+            print("⚠️ Please check your token has the correct permissions.")
+            print(
+                "⚠️ Generate a new token with write access at: https://huggingface.co/settings/tokens"
+            )
+            return
+
         # Get the parser name and target language
         parser_name = instance.parser_name
-        target_lang = instance.target_lang
 
         # Determine original dataset name from instance
         original_dataset = (
@@ -49,23 +76,29 @@ class HuggingFaceCallback(BaseCallback):
             original_dataset_repo_name = original_dataset
 
         # Create repository name
-        repo_name = f"{original_dataset_repo_name}-{target_lang}"
+        repo_name = f"{original_dataset_repo_name}-vi"
         full_repo_name = f"{hf_username}/{repo_name}"
 
         print(f"🔄 Preparing to upload translated dataset to {full_repo_name}")
 
         # Get paths
         output_dir = instance.output_dir
-        translated_file_path = os.path.join(
-            output_dir, f"{parser_name}_translated_{target_lang}.json"
-        )
+        translated_file_path = os.path.join(output_dir, f"{parser_name}_vi.json")
 
         # Validate that translated file exists
         if not os.path.exists(translated_file_path):
             print(f"⚠️ Translated file not found at {translated_file_path}")
             return
 
+        # Create README content and path
+        readme_path = os.path.join(output_dir, "README.md")
+
         try:
+            # Create README content
+            readme_content = self._prepare_readme(original_dataset_repo_name)
+            with open(readme_path, "w", encoding="utf-8") as f:
+                f.write(readme_content)
+
             # Create or get the repository on Hugging Face Hub
             try:
                 # Check if repository exists
@@ -74,19 +107,18 @@ class HuggingFaceCallback(BaseCallback):
             except Exception:
                 # Create repository if it doesn't exist
                 print(f"🆕 Creating new repository {full_repo_name}")
-                create_repo(
-                    repo_id=full_repo_name,
-                    token=hf_token,
-                    repo_type="dataset",
-                    private=False,
-                    exist_ok=True,
-                )
-
-            # Create README content
-            readme_content = self._prepare_readme(original_dataset_repo_name)
-            readme_path = os.path.join(output_dir, "README.md")
-            with open(readme_path, "w", encoding="utf-8") as f:
-                f.write(readme_content)
+                try:
+                    create_repo(
+                        repo_id=full_repo_name,
+                        token=hf_token,
+                        repo_type="dataset",
+                        private=False,
+                        exist_ok=True,
+                    )
+                except Exception as repo_error:
+                    print(f"❌ Error creating repository: {str(repo_error)}")
+                    print("⚠️ Please check your token permissions or try again later.")
+                    raise
 
             # Upload the dataset file to Hugging Face Hub
             print(f"⬆️ Uploading dataset to {full_repo_name}")
@@ -95,7 +127,7 @@ class HuggingFaceCallback(BaseCallback):
                 path_in_repo="data.json",
                 repo_id=full_repo_name,
                 repo_type="dataset",
-                commit_message=f"Upload translated dataset ({target_lang})",
+                commit_message="Upload translated dataset",
             )
 
             # Upload README file
@@ -104,27 +136,10 @@ class HuggingFaceCallback(BaseCallback):
                 path_in_repo="README.md",
                 repo_id=full_repo_name,
                 repo_type="dataset",
-                commit_message="Add README",
+                commit_message="Add README.md",
             )
 
-            # Add metadata (including tags)
-            metadata = {
-                "language": target_lang,
-                "license": "mit",
-                "original_dataset": original_dataset,
-                "tags": [
-                    "translated",
-                    "machine-translated",
-                    "multilingual",
-                    target_lang,
-                ],
-            }
-
-            # Update the dataset card
-            api.update_repo_card(
-                repo_id=full_repo_name, repo_type="dataset", metadata=metadata
-            )
-
+            # Add metadata directly in the README.md file (removing separate metadata handling)
             print(f"✅ Successfully uploaded translated dataset to {full_repo_name}")
             print(f"🔗 Visit: https://huggingface.co/datasets/{full_repo_name}")
 
@@ -136,17 +151,21 @@ class HuggingFaceCallback(BaseCallback):
         finally:
             # Clean up temporary README if it was created
             if os.path.exists(readme_path):
-                os.remove(readme_path)
+                try:
+                    os.remove(readme_path)
+                except:
+                    pass
 
     def _prepare_readme(self, original_dataset_name):
         """
-        Prepare README content based on the template.
+        Prepare README content based on the template with proper metadata.
 
         Args:
+            instance: The parser instance
             original_dataset_name: Name of the original dataset
 
         Returns:
-            README content
+            README content with metadata
         """
         # Get the template path
         template_path = os.path.join(
@@ -158,10 +177,31 @@ class HuggingFaceCallback(BaseCallback):
 
         # Read the template
         with open(template_path, "r", encoding="utf-8") as f:
-            template = f.read()
+            template_content = f.read()
 
-        # Replace placeholders
-        content = template.replace("[DATASET_NAME]", original_dataset_name)
-        content = content.replace("[ORIGINAL_DATASET_REPO_NAME]", original_dataset_name)
+        # Create metadata in the same structure as before
+        metadata = {
+            "language": "vi",
+            "license": "mit",
+            "original_dataset": original_dataset_name,
+            "tags": [
+                "translated",
+                "machine-translated",
+                "multilingual",
+                "vi",
+            ],
+        }
 
-        return content
+        metadata_yaml = yaml.dump(metadata, sort_keys=False)
+        metadata_header = f"---\n{metadata_yaml}---\n\n"
+
+        # Replace placeholders in template
+        template_content = template_content.replace(
+            "[DATASET_NAME]", original_dataset_name
+        )
+        template_content = template_content.replace(
+            "[ORIGINAL_DATASET_REPO_NAME]", original_dataset_name
+        )
+
+        # Combine metadata header with the template content
+        return metadata_header + template_content

@@ -258,7 +258,7 @@ class BatchProcessor:
             # Thread-safe file writing
             with self.file_lock:
                 with open(
-                    f"{self.output_dir}/{self.parser_name}.jsonl",
+                    f"{self.output_dir}/{self.parser_name}_vi.json",
                     "a",
                     encoding="utf-8",
                 ) as f:
