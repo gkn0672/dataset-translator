@@ -9,7 +9,7 @@
 
 ## 📋 Description
 
-Translated version of [ORIGINAL_DATASET_REPO_NAME] using our automate data translation tool 🤖.
+Translated version of [ORIGINAL_DATASET_REPO_LINK] using our automate data translation tool 🤖.
 
 ## 🏗️ Dataset Structure
 

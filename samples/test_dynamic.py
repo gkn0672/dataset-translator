@@ -26,10 +26,10 @@ if __name__ == "__main__":
         parser_callbacks=[VerboseCallback, HuggingFaceCallback],
         large_chunks_threshold=3000,
         limit=10,
-        auto_batch_size=False,  # Enable automatic batch size determination
-        max_memory_percent=0.6,  # Use up to 20% of available RAM
-        min_batch_size=1,  # Never go below 10 items per batch
-        max_batch_size=5,  # Never go above 1000 items per batch
+        auto_batch_size=False,
+        max_memory_percent=0.6,
+        min_batch_size=1,
+        max_batch_size=5,
     )
 
     magpie_parser.read()

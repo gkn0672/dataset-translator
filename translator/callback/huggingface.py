@@ -95,7 +95,9 @@ class HuggingFaceCallback(BaseCallback):
 
         try:
             # Create README content
-            readme_content = self._prepare_readme(original_dataset_repo_name)
+            readme_content = self._prepare_readme(
+                original_dataset_repo_name, hf_username, repo_name
+            )
             with open(readme_path, "w", encoding="utf-8") as f:
                 f.write(readme_content)
 
@@ -153,10 +155,10 @@ class HuggingFaceCallback(BaseCallback):
             if os.path.exists(readme_path):
                 try:
                     os.remove(readme_path)
-                except:
+                except Exception:
                     pass
 
-    def _prepare_readme(self, original_dataset_name):
+    def _prepare_readme(self, original_dataset_name, huggingface_username, repo_name):
         """
         Prepare README content based on the template with proper metadata.
 
@@ -183,7 +185,6 @@ class HuggingFaceCallback(BaseCallback):
         metadata = {
             "language": "vi",
             "license": "mit",
-            "original_dataset": original_dataset_name,
             "tags": [
                 "translated",
                 "machine-translated",
@@ -196,12 +197,25 @@ class HuggingFaceCallback(BaseCallback):
         metadata_header = f"---\n{metadata_yaml}---\n\n"
 
         # Replace placeholders in template
+        template_content = template_content.replace("[DATASET_NAME]", repo_name)
         template_content = template_content.replace(
-            "[DATASET_NAME]", original_dataset_name
+            "[YOUR_HF_USERNAME]", huggingface_username
         )
+        original_dataset_link = self.get_hf_dataset_link(original_dataset_name)
         template_content = template_content.replace(
-            "[ORIGINAL_DATASET_REPO_NAME]", original_dataset_name
+            "[ORIGINAL_DATASET_REPO_LINK]", original_dataset_link
         )
-
         # Combine metadata header with the template content
         return metadata_header + template_content
+
+    def get_hf_dataset_link(self, dataset_name: str) -> str:
+        """
+        Generate the Hugging Face dataset link for the given dataset name.
+
+        Args:
+            dataset_name (str): The name of the dataset.
+
+        Returns:
+            str: The Hugging Face dataset link.
+        """
+        return f"[{dataset_name}](https://huggingface.co/datasets/{dataset_name})"
