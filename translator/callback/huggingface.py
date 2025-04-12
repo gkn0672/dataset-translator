@@ -216,6 +216,6 @@ class HuggingFaceCallback(BaseCallback):
             dataset_name (str): The name of the dataset.
 
         Returns:
-            str: The Hugging Face dataset link.
+            str: The Hugging Face dataset link in markdown.
         """
         return f"[{dataset_name}](https://huggingface.co/datasets/{dataset_name})"
