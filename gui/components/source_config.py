@@ -41,7 +41,7 @@ def create_source_config():
 
                     components["file_path"] = gr.Textbox(
                         label="File Path",
-                        placeholder="e.g., ./data/my_dataset.csv",
+                        placeholder="e.g., ./data/dataset_folder",
                         visible=False,
                         container=True,
                     )

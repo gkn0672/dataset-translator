@@ -60,7 +60,7 @@ def translate_dataset(
         config_class = QAConfig if target_config == "QAConfig" else COTConfig
 
         # Set up callbacks
-        parser_callbacks = [log_callback]
+        parser_callbacks = [LogCaptureCallback]
         if use_verbose:
             parser_callbacks.append(VerboseCallback)
         if push_to_huggingface:
@@ -99,7 +99,7 @@ def translate_dataset(
 
         parser = DynamicDataParser(
             file_path=actual_file_path,
-            output_path="./output",
+            output_path="C:\\Code\\dataset-translator\\samples\\out",
             dataset_name=actual_dataset_name,
             field_mappings=field_mappings,
             target_config=config_class,

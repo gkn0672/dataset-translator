@@ -59,10 +59,10 @@ def create_translation_settings():
 
                 components["max_memory_percent"] = gr.Slider(
                     label="Max Memory %",
-                    minimum=0.1,
+                    minimum=0.5,
                     maximum=0.9,
                     value=0.6,
-                    step=0.1,
+                    step=0.01,
                     container=True,
                 )
 
