@@ -3,7 +3,7 @@ from gui.handlers.source import (
     handle_fetch_properties,
     switch_config,
 )
-from gui.handlers.mapping import add_field, remove_field
+from gui.handlers.mapping import add_field, remove_field, update_dropdown_options
 from gui.handlers.translation import translate_dataset
 from gui.utils.json import update_json_mapping
 
@@ -34,7 +34,11 @@ def register_all_handlers(components):
     components["target_config"].change(
         lambda config_type: switch_config(config_type, components),
         inputs=[components["target_config"]],
-        outputs=[components["qa_fields"], components["cot_fields"]],
+        outputs=[
+            components["qa_fields"],
+            components["cot_fields"],
+            components["field_mappings_str"],
+        ],
     )
 
     # Fetch properties button
@@ -102,10 +106,14 @@ def register_all_handlers(components):
         components["cot_question_dropdown"],
         components["cot_reasoning_dropdown"],
         components["cot_answer_dropdown"],
-        components["additional_fields_state"],
     ]:
         input_field.change(
-            update_json_mapping,
+            fn=lambda tc, qa_q, qa_a, cot_q, cot_r, cot_a, af, avail_props: (
+                update_json_mapping(tc, qa_q, qa_a, cot_q, cot_r, cot_a, af),
+                *update_dropdown_options(
+                    tc, qa_q, qa_a, cot_q, cot_r, cot_a, avail_props
+                ),
+            ),
             inputs=[
                 components["target_config"],
                 components["qa_question_dropdown"],
@@ -114,9 +122,33 @@ def register_all_handlers(components):
                 components["cot_reasoning_dropdown"],
                 components["cot_answer_dropdown"],
                 components["additional_fields_state"],
+                components["available_properties_state"],
             ],
-            outputs=[components["field_mappings_str"]],
+            outputs=[
+                components["field_mappings_str"],
+                components["qa_question_dropdown"],
+                components["qa_answer_dropdown"],
+                components["cot_question_dropdown"],
+                components["cot_reasoning_dropdown"],
+                components["cot_answer_dropdown"],
+                components["new_field_value"],
+            ],
         )
+
+    # Special handling for additional fields state changes
+    components["additional_fields_state"].change(
+        update_json_mapping,
+        inputs=[
+            components["target_config"],
+            components["qa_question_dropdown"],
+            components["qa_answer_dropdown"],
+            components["cot_question_dropdown"],
+            components["cot_reasoning_dropdown"],
+            components["cot_answer_dropdown"],
+            components["additional_fields_state"],
+        ],
+        outputs=[components["field_mappings_str"]],
+    )
 
     # Connect the submit button
     components["submit_button"].click(

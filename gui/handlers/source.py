@@ -124,13 +124,21 @@ def switch_config(config_type, components):
     Returns:
         dict: Dictionary of component updates
     """
+    json_template = generate_config_template(config_type)
+
     if config_type == "QAConfig":
         return {
             components["qa_fields"]: gr.update(visible=True),
             components["cot_fields"]: gr.update(visible=False),
+            components["field_mappings_str"]: gr.update(
+                value=json_template
+            ),  # Update JSON
         }
     else:  # COTConfig
         return {
             components["qa_fields"]: gr.update(visible=False),
             components["cot_fields"]: gr.update(visible=True),
+            components["field_mappings_str"]: gr.update(
+                value=json_template
+            ),  # Update JSON
         }
