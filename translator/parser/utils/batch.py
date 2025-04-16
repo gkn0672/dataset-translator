@@ -427,9 +427,3 @@ class BatchProcessor:
             f"Peak memory usage estimate: {self.memory_high_water_mark / (1024**2):.2f} MB"
         )
         print(f"Memory limit: {self.max_memory_bytes / (1024**2):.2f} MB")
-
-        # Call any completion callbacks
-        if self.parser_callbacks:
-            for callback in self.parser_callbacks:
-                if hasattr(callback, "on_finish_save"):
-                    callback.on_finish_save(self)

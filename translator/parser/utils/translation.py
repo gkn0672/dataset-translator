@@ -1,5 +1,8 @@
 from typing import Dict, List, Union
 from tqdm.auto import tqdm
+import threading
+
+print_lock = threading.Lock()
 
 
 def translate_example(
@@ -139,9 +142,18 @@ def translate_batch(
         return []
 
     result = []
-    progress_bar = tqdm(data_batch, desc=f"Translating {desc if desc else ''}")
+    batch_desc = f"Translating Batch {desc}" if desc else "Translating"
 
-    for example in progress_bar:
+    # Use a lock to prevent interleaved output from multiple batches
+    with print_lock:
+        separator = "=" * 80
+        print(f"\n{separator}")
+        print(f"  STARTING {batch_desc.upper()} - {len(data_batch)} ITEMS")
+        print(f"{separator}\n")
+
+    # Process each example
+    for idx, example in enumerate(data_batch):
+        # Translate the example
         translated_example = translate_example(
             example,
             fields_to_translate,
@@ -155,5 +167,21 @@ def translate_batch(
             max_list_length_per_thread,
         )
         result.append(translated_example)
+
+        # Print progress with lock to avoid interleaving
+        current = idx + 1
+        total = len(data_batch)
+        if current == 1 or current == total or current % (5 if total > 10 else 1) == 0:
+            with print_lock:
+                percent = int(current / total * 100)
+                print(f"{batch_desc}: Item {current}/{total} ({percent}%) completed")
+
+    # Print completion message with lock to avoid interleaving
+    with print_lock:
+        print(f"\n{separator}")
+        print(
+            f"  COMPLETED {batch_desc.upper()} - {len(data_batch)}/{len(data_batch)} ITEMS"
+        )
+        print(f"{separator}\n")
 
     return result

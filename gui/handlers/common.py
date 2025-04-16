@@ -150,7 +150,7 @@ def register_all_handlers(components):
         outputs=[components["field_mappings_str"]],
     )
 
-    # Connect the submit button
+    # Connect the submit button with log components
     components["submit_button"].click(
         translate_dataset,
         inputs=[
@@ -167,6 +167,8 @@ def register_all_handlers(components):
             components["max_memory_percent"],
             components["min_batch_size"],
             components["max_batch_size"],
+            components["log_file_path"],  # Pass log file path
+            components["progress_status"],  # Pass progress status component
         ],
         outputs=components["logs_output"],
     )

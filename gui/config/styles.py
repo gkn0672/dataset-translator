@@ -7,11 +7,21 @@ body {
 
 /* Log output styling */
 #logs-output {
-    background-color: #2d2d2d;
     font-family: monospace;
     color: #e0e0e0;
     border: 1px solid #444;
     border-radius: 6px;
+}
+
+/* Progress status styling */
+#progress-status {
+    background-color: #2d2d2d;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    margin-top: 8px;
+    font-weight: bold;
+    color: #ff7f00;
 }
 
 /* JSON Editor styling */

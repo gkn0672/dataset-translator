@@ -395,6 +395,7 @@ dependencies = [
     { name = "datasets" },
     { name = "fuzzywuzzy" },
     { name = "gradio" },
+    { name = "gradio-log" },
     { name = "groq" },
     { name = "ipykernel" },
     { name = "memoization" },
@@ -413,6 +414,7 @@ requires-dist = [
     { name = "datasets", specifier = ">=3.3.2" },
     { name = "fuzzywuzzy", specifier = ">=0.18.0" },
     { name = "gradio", specifier = ">=5.25.0" },
+    { name = "gradio-log", specifier = ">=0.0.8" },
     { name = "groq", specifier = ">=0.18.0" },
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "memoization", specifier = ">=0.4.0" },
@@ -700,6 +702,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/87/78/22a3cc136772979fefa6e3b3afb4352e6b2f5b43e699bbd4a32e6f588bf0/gradio_client-1.8.0.tar.gz", hash = "sha256:a58c520c73fa7ff8bef54e41b19df2cd9071fd9d0cc00475eb397842baed19c8", size = 320305 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/15/c8/0df7f92c8f1bdf5c244c29de8cd7e33a5931768ddba245526a770bfa18a2/gradio_client-1.8.0-py3-none-any.whl", hash = "sha256:27a3ab5278a44d57d1d05a86de67cec5f7370e540600d11816744a620addb967", size = 322165 },
+]
+
+[[package]]
+name = "gradio-log"
+version = "0.0.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "gradio" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6a/8d/368e16b93fdd2fc0b601ff648a7786e8551a7b4cc946faec0bdcff33ea4e/gradio_log-0.0.8.tar.gz", hash = "sha256:43d7aeb2651fb3b0583f6c205bdabc4ede50b47b531328174db9b0ca63cccf0c", size = 3457531 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4d/9b/5caba8a73175d2c6d8ebd72d92d1e6943f188cb5fff2196593a5f0d0dc1e/gradio_log-0.0.8-py3-none-any.whl", hash = "sha256:ed88db174429cc539c3bd9605891471f69544aafb930c36706a67a073459db48", size = 1220834 },
 ]
 
 [[package]]
