@@ -1,5 +1,4 @@
 from typing import Dict, List, Union
-from tqdm.auto import tqdm
 import threading
 
 print_lock = threading.Lock()
@@ -142,7 +141,8 @@ def translate_batch(
         return []
 
     result = []
-    batch_desc = f"Translating Batch {desc}" if desc else "Translating"
+    # Fix the duplication of "Batch" in the output
+    batch_desc = f"Translating {desc}" if desc else "Translating Batch"
 
     # Use a lock to prevent interleaved output from multiple batches
     with print_lock:

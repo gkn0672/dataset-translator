@@ -1,65 +1,13 @@
 import json
 import traceback
 import sys
-import os
-import time
-import io
-import threading
-import gradio as gr
 from translator.parser.dynamic import DynamicDataParser
-from translator.callback.verbose import VerboseCallback
 from translator.callback.huggingface import HuggingFaceCallback
 from translator.callback.gradio import LogCaptureCallback
 from engine.ollama import OllamaEngine
 from engine.groq import GroqEngine
 from config.qa import QAConfig
 from config.cot import COTConfig
-
-
-class CaptureOutput:
-    """Capture stdout and stderr to log file and memory"""
-
-    def __init__(self, log_file, log_list):
-        self.log_file = log_file
-        self.log_list = log_list
-        self.stdout = sys.stdout
-        self.stderr = sys.stderr
-        self.buffer = io.StringIO()
-        self.lock = threading.Lock()
-
-    def write(self, text):
-        # Write to original stdout for IDE console
-        self.stdout.write(text)
-        self.stdout.flush()
-
-        if text.strip():  # Ignore empty lines
-            # Add timestamp for logs
-            timestamp = time.strftime("[%H:%M:%S]")
-
-            with self.lock:
-                # Write to log file with timestamp for each line
-                with open(self.log_file, "a", encoding="utf-8") as f:
-                    for line in text.splitlines():
-                        if line.strip():
-                            f.write(f"{timestamp} {line.strip()}\n")
-                    f.flush()
-
-                # Store in memory for final return
-                for line in text.splitlines():
-                    if line.strip():
-                        self.log_list.append(f"{timestamp} {line.strip()}")
-
-    def flush(self):
-        self.stdout.flush()
-
-    def __enter__(self):
-        sys.stdout = self
-        sys.stderr = self
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout = self.stdout
-        sys.stderr = self.stderr
 
 
 def translate_dataset(
@@ -82,70 +30,95 @@ def translate_dataset(
     """
     Main function to translate the dataset.
     """
-    # Clear log file to start fresh
-    with open(log_file_path, "w", encoding="utf-8") as f:
-        f.write("")
+    # Initialize log capture
+    log_callback = LogCaptureCallback()
+    log_callback.set_components(log_file_path, progress_status)
 
-    # Initialize stored logs list
-    stored_logs = []
+    try:
+        # Clear log file to start fresh
+        with open(log_file_path, "w", encoding="utf-8") as f:
+            f.write("")
 
-    # Use a context manager to capture all output
-    with CaptureOutput(log_file_path, stored_logs):
+        # Write initial log
+        log_callback.add_log("Starting dataset translation...")
+
+        # Parse field mappings
         try:
-            print("Starting dataset translation...")
-
-            # Parse field mappings
-            try:
-                field_mappings = json.loads(field_mappings_str)
-            except json.JSONDecodeError:
-                print(
-                    "Error: Invalid field mappings format. Please provide valid JSON."
-                )
-                return "\n".join(stored_logs)
-
-            # Determine which target config to use
-            print(f"Using target config: {target_config}")
-            config_class = QAConfig if target_config == "QAConfig" else COTConfig
-
-            # Set up callbacks
-            parser_callbacks = []
-            if push_to_huggingface:
-                parser_callbacks.append(HuggingFaceCallback)
-
-            # Create translator engine
-            if translator_engine == "ollama":
-                translator = OllamaEngine(model_name=translator_model)
-                print(f"Using Ollama translator with model: {translator_model}")
-            elif translator_engine == "groq":
-                # Use GroqEngine
-                translator = GroqEngine()
-                print("Using Groq translator")
-            else:
-                print(
-                    f"Unknown translator engine: {translator_engine}. Please use Ollama or Groq."
-                )
-                return "\n".join(stored_logs)
-
-            # Determine data source
-            actual_dataset_name = (
-                dataset_name if data_source_type == "dataset" else None
+            field_mappings = json.loads(field_mappings_str)
+        except json.JSONDecodeError:
+            log_callback.add_log(
+                "Error: Invalid field mappings format. Please provide valid JSON."
             )
-            actual_file_path = file_path if data_source_type == "file" else None
+            return log_callback.get_logs()
 
-            # Log configuration
-            print("Configuration:")
-            print(f"  Data Source Type: {data_source_type}")
-            print(f"  Dataset Name: {actual_dataset_name}")
-            print(f"  File Path: {actual_file_path}")
-            print(f"  Target Config: {target_config}")
-            print(f"  Field Mappings: {field_mappings}")
-            print(
-                f"  Memory: {max_memory_percent * 100}%, Batch Size: {min_batch_size}-{max_batch_size}"
+        # Determine which target config to use
+        log_callback.add_log(f"Using target config: {target_config}")
+        config_class = QAConfig if target_config == "QAConfig" else COTConfig
+
+        # Set up callbacks - use only LogCaptureCallback for cleaner logs
+        parser_callbacks = []  # <-- Changed from [LogCaptureCallback]
+        if push_to_huggingface:
+            parser_callbacks.append(HuggingFaceCallback)
+
+        # Create translator engine
+        if translator_engine == "ollama":
+            translator = OllamaEngine(model_name=translator_model)
+            log_callback.add_log(
+                f"Using Ollama translator with model: {translator_model}"
             )
+        elif translator_engine == "groq":
+            # Use GroqEngine
+            translator = GroqEngine()
+            log_callback.add_log("Using Groq translator")
+        else:
+            log_callback.add_log(
+                f"Unknown translator engine: {translator_engine}. Please use Ollama or Groq."
+            )
+            return log_callback.get_logs()
 
-            # Create the parser
-            print("Creating DynamicDataParser...")
+        # Determine data source
+        actual_dataset_name = dataset_name if data_source_type == "dataset" else None
+        actual_file_path = file_path if data_source_type == "file" else None
 
+        # Log configuration
+        log_callback.add_log("Configuration:")
+        log_callback.add_log(f"  Data Source Type: {data_source_type}")
+        log_callback.add_log(f"  Dataset Name: {actual_dataset_name}")
+        log_callback.add_log(f"  File Path: {actual_file_path}")
+        log_callback.add_log(f"  Target Config: {target_config}")
+        log_callback.add_log(f"  Field Mappings: {field_mappings}")
+        log_callback.add_log(
+            f"  Memory: {max_memory_percent * 100}%, Batch Size: {min_batch_size}-{max_batch_size}"
+        )
+
+        # Create the parser
+        log_callback.add_log("Creating DynamicDataParser...")
+
+        # Setup log capture for direct logging from the process
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+
+        # Create a custom stdout/stderr redirector that logs to our callback
+        class LogRedirector:
+            def __init__(self, callback):
+                self.callback = callback
+
+            def write(self, text):
+                if text.strip():
+                    for line in text.splitlines():
+                        if line.strip():
+                            # Print to original stdout for IDE console
+                            original_stdout.write(line + "\n")
+                            self.callback.add_log(line.strip())
+
+            def flush(self):
+                original_stdout.flush()
+
+        # Redirect stdout and stderr to our log capture
+        sys.stdout = LogRedirector(log_callback)
+        sys.stderr = LogRedirector(log_callback)
+
+        try:
             parser = DynamicDataParser(
                 file_path=actual_file_path,
                 output_path="C:\\Code\\dataset-translator\\samples\\out",
@@ -155,7 +128,7 @@ def translate_dataset(
                 do_translate=True,
                 translator=translator,
                 verbose=use_verbose,
-                parser_callbacks=parser_callbacks,
+                parser_callbacks=parser_callbacks,  # No LogCaptureCallback here
                 limit=int(limit) if limit else None,
                 max_memory_percent=float(max_memory_percent),
                 min_batch_size=int(min_batch_size),
@@ -163,22 +136,21 @@ def translate_dataset(
             )
 
             # Run the parser
-            print("Reading dataset...")
             parser.read()
-
-            print("Converting data...")
             parser.convert()
-
-            print("Translating and saving data...")
             parser.save()
 
-            print("Translation completed successfully!")
+            log_callback.add_log("Translation completed successfully!")
+        finally:
+            # Restore stdout and stderr
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
 
-            # Return the logs
-            return "\n".join(stored_logs)
+        # Return the logs
+        return log_callback.get_logs()
 
-        except Exception as e:
-            error_trace = traceback.format_exc()
-            print(f"Error: {str(e)}")
-            print(error_trace)
-            return "\n".join(stored_logs)
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        log_callback.add_log(f"Error: {str(e)}")
+        log_callback.add_log(error_trace)
+        return log_callback.get_logs()
