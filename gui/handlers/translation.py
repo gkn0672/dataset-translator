@@ -1,6 +1,7 @@
 import json
 import traceback
 import sys
+import os
 from translator.parser.dynamic import DynamicDataParser
 from translator.callback.huggingface import HuggingFaceCallback
 from translator.callback.gradio import LogCaptureCallback
@@ -8,6 +9,51 @@ from engine.ollama import OllamaEngine
 from engine.groq import GroqEngine
 from config.qa import QAConfig
 from config.cot import COTConfig
+
+
+def validate_output_directory(output_dir, log_callback):
+    """
+    Validate if the output directory is valid and writable.
+
+    Args:
+        output_dir (str): Path to the output directory
+        log_callback: Log callback for status updates
+
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    try:
+        # Normalize path
+        norm_path = os.path.normpath(output_dir)
+
+        # Check if directory exists, if not create it
+        if not os.path.exists(norm_path):
+            log_callback.add_log(
+                f"Output directory doesn't exist. Creating: {norm_path}"
+            )
+            os.makedirs(norm_path, exist_ok=True)
+
+        # Verify it's a directory
+        if not os.path.isdir(norm_path):
+            log_callback.add_log(f"Error: {norm_path} is not a directory")
+            return False
+
+        # Check if writable by trying to create a temporary file
+        test_file = os.path.join(norm_path, "test_write_permission.tmp")
+        try:
+            with open(test_file, "w") as f:
+                f.write("test")
+            os.remove(test_file)
+        except (IOError, PermissionError):
+            log_callback.add_log(
+                f"Error: Cannot write to {norm_path}. Check permissions."
+            )
+            return False
+
+        return True
+    except Exception as e:
+        log_callback.add_log(f"Error validating output directory: {str(e)}")
+        return False
 
 
 def translate_dataset(
@@ -24,8 +70,9 @@ def translate_dataset(
     max_memory_percent,
     min_batch_size,
     max_batch_size,
-    log_file_path,  # Path to the log file
-    progress_status=None,  # Progress status component
+    output_dir,
+    log_file_path,
+    progress_status=None,
 ):
     """
     Main function to translate the dataset.
@@ -41,6 +88,11 @@ def translate_dataset(
 
         # Write initial log
         log_callback.add_log("Starting dataset translation...")
+
+        # Validate output directory
+        if not validate_output_directory(output_dir, log_callback):
+            log_callback.add_log("Translation aborted due to invalid output directory.")
+            return log_callback.get_logs()
 
         # Parse field mappings
         try:
@@ -79,6 +131,10 @@ def translate_dataset(
         # Determine data source
         actual_dataset_name = dataset_name if data_source_type == "dataset" else None
         actual_file_path = file_path if data_source_type == "file" else None
+
+        # Normalize output path
+        normalized_output_path = os.path.normpath(output_dir)
+        log_callback.add_log(f"Output directory: {normalized_output_path}")
 
         # Log configuration
         log_callback.add_log("Configuration:")
@@ -121,7 +177,7 @@ def translate_dataset(
         try:
             parser = DynamicDataParser(
                 file_path=actual_file_path,
-                output_path="C:\\Code\\dataset-translator\\samples\\out",
+                output_path=normalized_output_path,
                 dataset_name=actual_dataset_name,
                 field_mappings=field_mappings,
                 target_config=config_class,

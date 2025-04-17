@@ -50,6 +50,13 @@ def create_translation_settings():
             with gr.Group():
                 gr.HTML("⚙️ Performance Settings")
 
+                components["output_dir"] = gr.Textbox(
+                    label="Output Directory",
+                    placeholder="e.g., /path/to/output or C:/output/path",
+                    value="samples/out",  # Relative path without escape sequences
+                    container=True,
+                )
+
                 components["limit"] = gr.Number(
                     label="Limit (records)",
                     value=10,

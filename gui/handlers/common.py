@@ -167,8 +167,9 @@ def register_all_handlers(components):
             components["max_memory_percent"],
             components["min_batch_size"],
             components["max_batch_size"],
-            components["log_file_path"],  # Pass log file path
-            components["progress_status"],  # Pass progress status component
+            components["output_dir"],  # Added output_dir as input
+            components["log_file_path"],
+            components["progress_status"],
         ],
         outputs=components["logs_output"],
     )
