@@ -6,6 +6,8 @@ from gui.handlers.source import (
 from gui.handlers.mapping import add_field, remove_field, update_dropdown_options
 from gui.handlers.translation import translate_dataset
 from gui.utils.json import update_json_mapping
+import gradio as gr
+import os
 
 
 def register_all_handlers(components):
@@ -150,7 +152,40 @@ def register_all_handlers(components):
         outputs=[components["field_mappings_str"]],
     )
 
-    # Connect the submit button with log components
+    # List of button components that need variant changes
+    button_components = [
+        components["fetch_properties_btn"],  # Fetch Properties button
+        components["add_field_btn"],  # Add Field button
+        components["remove_field_btn"],  # Remove Field button
+        components["submit_button"],  # Start Translation button
+    ]
+
+    # List of other components that just need interactive=False
+    other_components = [
+        components["data_source_type"],  # radio
+        components["dataset_name"],  # textbox
+        components["file_path"],  # textbox
+        components["target_config"],  # dropdown
+        components["qa_question_dropdown"],  # dropdown
+        components["qa_answer_dropdown"],  # dropdown
+        components["cot_question_dropdown"],  # dropdown
+        components["cot_reasoning_dropdown"],  # dropdown
+        components["cot_answer_dropdown"],  # dropdown
+        components["new_field_key"],  # textbox
+        components["new_field_value"],  # dropdown
+        components["field_to_remove"],  # dropdown
+        components["translator_engine"],  # dropdown
+        components["translator_model"],  # textbox
+        components["use_verbose"],  # checkbox
+        components["push_to_huggingface"],  # checkbox
+        components["output_dir"],  # textbox
+        components["limit"],  # number
+        components["max_memory_percent"],  # slider
+        components["min_batch_size"],  # number
+        components["max_batch_size"],  # number
+    ]
+
+    # One-step implementation
     components["submit_button"].click(
         translate_dataset,
         inputs=[
@@ -167,9 +202,11 @@ def register_all_handlers(components):
             components["max_memory_percent"],
             components["min_batch_size"],
             components["max_batch_size"],
-            components["output_dir"],  # Added output_dir as input
+            components["output_dir"],
             components["log_file_path"],
             components["progress_status"],
         ],
-        outputs=components["logs_output"],
+        outputs=[components["logs_output"]] + button_components + other_components,
+        queue=True,  # Queue this function to prevent other operations
+        concurrency_limit=1,  # Only one instance at a time
     )

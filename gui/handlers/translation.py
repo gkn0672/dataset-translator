@@ -2,6 +2,7 @@ import json
 import traceback
 import sys
 import os
+import gradio as gr
 from translator.parser.dynamic import DynamicDataParser
 from translator.callback.huggingface import HuggingFaceCallback
 from translator.callback.gradio import LogCaptureCallback
@@ -81,6 +82,18 @@ def translate_dataset(
     log_callback = LogCaptureCallback()
     log_callback.set_components(log_file_path, progress_status)
 
+    # Create button updates (for the 4 buttons)
+    button_updates = []
+    for _ in range(4):
+        # Disable buttons and change to secondary variant (gray appearance)
+        button_updates.append(gr.update(interactive=False, variant="secondary"))
+
+    # Create other component updates (for the 21 other components)
+    other_updates = []
+    for _ in range(21):
+        # Just disable other components
+        other_updates.append(gr.update(interactive=False))
+
     try:
         # Clear log file to start fresh
         with open(log_file_path, "w", encoding="utf-8") as f:
@@ -88,11 +101,17 @@ def translate_dataset(
 
         # Write initial log
         log_callback.add_log("Starting dataset translation...")
+        log_callback.add_log("UI components disabled during translation process.")
 
         # Validate output directory
         if not validate_output_directory(output_dir, log_callback):
             log_callback.add_log("Translation aborted due to invalid output directory.")
-            return log_callback.get_logs()
+            # Re-enable all components
+            return (
+                [log_callback.get_logs()]
+                + [gr.update(interactive=True, variant="primary") for _ in range(4)]
+                + [gr.update(interactive=True) for _ in range(21)]
+            )
 
         # Parse field mappings
         try:
@@ -101,7 +120,12 @@ def translate_dataset(
             log_callback.add_log(
                 "Error: Invalid field mappings format. Please provide valid JSON."
             )
-            return log_callback.get_logs()
+            # Re-enable all components
+            return (
+                [log_callback.get_logs()]
+                + [gr.update(interactive=True, variant="primary") for _ in range(4)]
+                + [gr.update(interactive=True) for _ in range(21)]
+            )
 
         # Determine which target config to use
         log_callback.add_log(f"Using target config: {target_config}")
@@ -126,7 +150,12 @@ def translate_dataset(
             log_callback.add_log(
                 f"Unknown translator engine: {translator_engine}. Please use Ollama or Groq."
             )
-            return log_callback.get_logs()
+            # Re-enable all components
+            return (
+                [log_callback.get_logs()]
+                + [gr.update(interactive=True, variant="primary") for _ in range(4)]
+                + [gr.update(interactive=True) for _ in range(21)]
+            )
 
         # Determine data source
         actual_dataset_name = dataset_name if data_source_type == "dataset" else None
@@ -202,11 +231,21 @@ def translate_dataset(
             sys.stdout = original_stdout
             sys.stderr = original_stderr
 
-        # Return the logs
-        return log_callback.get_logs()
+        # Re-enable all components
+        return (
+            [log_callback.get_logs()]
+            + [gr.update(interactive=True, variant="primary") for _ in range(4)]
+            + [gr.update(interactive=True) for _ in range(21)]
+        )
 
     except Exception as e:
         error_trace = traceback.format_exc()
         log_callback.add_log(f"Error: {str(e)}")
         log_callback.add_log(error_trace)
-        return log_callback.get_logs()
+
+        # Re-enable all components on error
+        return (
+            [log_callback.get_logs()]
+            + [gr.update(interactive=True, variant="primary") for _ in range(4)]
+            + [gr.update(interactive=True) for _ in range(21)]
+        )
