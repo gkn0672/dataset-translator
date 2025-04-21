@@ -10,6 +10,28 @@ import gradio as gr
 import os
 
 
+def disable_all_components():
+    """
+    Function to disable all components before translation starts.
+    This runs immediately when the user clicks 'Start Translation'.
+    """
+    print("Disabling all components before translation")
+
+    # Create button updates (secondary variant and disabled)
+    button_updates = [
+        gr.update(interactive=False, variant="secondary"),  # fetch_properties_btn
+        gr.update(interactive=False, variant="secondary"),  # add_field_btn
+        gr.update(interactive=False, variant="secondary"),  # remove_field_btn
+        gr.update(interactive=False, variant="secondary"),  # submit_button
+    ]
+
+    # Create other component updates (just disabled)
+    other_updates = [gr.update(interactive=False) for _ in range(21)]
+
+    # Return all updates
+    return button_updates + other_updates
+
+
 def register_all_handlers(components):
     """
     Register all event handlers for the application.
@@ -152,40 +174,45 @@ def register_all_handlers(components):
         outputs=[components["field_mappings_str"]],
     )
 
-    # List of button components that need variant changes
-    button_components = [
-        components["fetch_properties_btn"],  # Fetch Properties button
-        components["add_field_btn"],  # Add Field button
-        components["remove_field_btn"],  # Remove Field button
-        components["submit_button"],  # Start Translation button
+    # Define component keys for disabling/enabling
+    button_keys = [
+        "fetch_properties_btn",
+        "add_field_btn",
+        "remove_field_btn",
+        "submit_button",
+    ]
+    other_keys = [
+        "data_source_type",
+        "dataset_name",
+        "file_path",
+        "target_config",
+        "qa_question_dropdown",
+        "qa_answer_dropdown",
+        "cot_question_dropdown",
+        "cot_reasoning_dropdown",
+        "cot_answer_dropdown",
+        "new_field_key",
+        "new_field_value",
+        "field_to_remove",
+        "translator_engine",
+        "translator_model",
+        "use_verbose",
+        "push_to_huggingface",
+        "output_dir",
+        "limit",
+        "max_memory_percent",
+        "min_batch_size",
+        "max_batch_size",
     ]
 
-    # List of other components that just need interactive=False
-    other_components = [
-        components["data_source_type"],  # radio
-        components["dataset_name"],  # textbox
-        components["file_path"],  # textbox
-        components["target_config"],  # dropdown
-        components["qa_question_dropdown"],  # dropdown
-        components["qa_answer_dropdown"],  # dropdown
-        components["cot_question_dropdown"],  # dropdown
-        components["cot_reasoning_dropdown"],  # dropdown
-        components["cot_answer_dropdown"],  # dropdown
-        components["new_field_key"],  # textbox
-        components["new_field_value"],  # dropdown
-        components["field_to_remove"],  # dropdown
-        components["translator_engine"],  # dropdown
-        components["translator_model"],  # textbox
-        components["use_verbose"],  # checkbox
-        components["push_to_huggingface"],  # checkbox
-        components["output_dir"],  # textbox
-        components["limit"],  # number
-        components["max_memory_percent"],  # slider
-        components["min_batch_size"],  # number
-        components["max_batch_size"],  # number
-    ]
+    # First click event: Disable all components immediately
+    components["submit_button"].click(
+        disable_all_components,
+        outputs=[components[key] for key in button_keys + other_keys],
+        queue=False,  # Run immediately without queueing
+    )
 
-    # One-step implementation
+    # Second click event: Run the actual translation process
     components["submit_button"].click(
         translate_dataset,
         inputs=[
@@ -206,7 +233,8 @@ def register_all_handlers(components):
             components["log_file_path"],
             components["progress_status"],
         ],
-        outputs=[components["logs_output"]] + button_components + other_components,
-        queue=True,  # Queue this function to prevent other operations
+        outputs=[components["logs_output"]]
+        + [components[key] for key in button_keys + other_keys],
+        queue=True,  # Queue this function for background execution
         concurrency_limit=1,  # Only one instance at a time
     )
