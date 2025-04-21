@@ -49,13 +49,21 @@ def create_interface():
                     settings_components = create_translation_settings()
                     components.update(settings_components)
 
-        # Start translation button (outside tabs)
+        # Start translation and cancel buttons (outside tabs)
         with gr.Row():
             components["submit_button"] = gr.Button(
                 "🚀 Start Translation",
                 variant="primary",
                 size="lg",
                 elem_id="start-translation-btn",
+            )
+
+            components["cancel_button"] = gr.Button(
+                "❌ Cancel Translation",
+                variant="stop",
+                size="lg",
+                elem_id="cancel-translation-btn",
+                visible=False,  # Hidden initially
             )
 
         # Register all event handlers

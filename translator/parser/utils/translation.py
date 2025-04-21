@@ -15,6 +15,7 @@ def translate_example(
     verbose: bool = False,
     enable_sub_task_thread: bool = False,
     max_list_length_per_thread: int = 100,
+    cancellation_event=None,
 ) -> Dict:
     """
     Translate a single example.
@@ -30,14 +31,23 @@ def translate_example(
         verbose: Whether to print verbose logs
         enable_sub_task_thread: Whether to use threading for large lists
         max_list_length_per_thread: Maximum list length to process in a single thread
+        cancellation_event: Optional event to check for cancellation
 
     Returns:
         Translated example
     """
+    # Check for cancellation
+    if cancellation_event and cancellation_event.is_set():
+        return example
+
     result = example.copy()
 
     # Translate each field that should be translated
     for field in fields_to_translate:
+        # Check for cancellation
+        if cancellation_event and cancellation_event.is_set():
+            return result
+
         if field not in example or example[field] is None or example[field] == "":
             continue
 
@@ -62,6 +72,7 @@ def translate_example(
                     target_lang,
                     fail_translation_code,
                     max_list_length_per_thread,
+                    cancellation_event,
                 )
             else:
                 result[field] = translator.translate(
@@ -94,6 +105,7 @@ def translate_large_list(
     target_lang: str,
     fail_translation_code: str,
     max_list_length_per_thread: int,
+    cancellation_event=None,
 ) -> List[str]:
     """
     Handle translation of a large list by breaking it into smaller chunks.
@@ -103,6 +115,10 @@ def translate_large_list(
     results = []
 
     for chunk in chunks:
+        # Check for cancellation
+        if cancellation_event and cancellation_event.is_set():
+            return items  # Return original items if cancelled
+
         translated = translator.translate(
             chunk,
             src=source_lang,
@@ -133,11 +149,16 @@ def translate_batch(
     enable_sub_task_thread: bool = False,
     max_list_length_per_thread: int = 100,
     desc: str = None,
+    cancellation_event=None,
 ) -> Union[None, List[Dict]]:
     """
     Translate a batch of data.
     """
     if not data_batch:
+        return []
+
+    # Check for cancellation at the beginning
+    if cancellation_event and cancellation_event.is_set():
         return []
 
     result = []
@@ -153,6 +174,11 @@ def translate_batch(
 
     # Process each example
     for idx, example in enumerate(data_batch):
+        # Check for cancellation
+        if cancellation_event and cancellation_event.is_set():
+            print(f"❌ Cancellation detected during batch translation: {batch_desc}")
+            return []
+
         # Translate the example
         translated_example = translate_example(
             example,
@@ -165,6 +191,7 @@ def translate_batch(
             verbose,
             enable_sub_task_thread,
             max_list_length_per_thread,
+            cancellation_event,
         )
         result.append(translated_example)
 
@@ -175,6 +202,10 @@ def translate_batch(
             with print_lock:
                 percent = int(current / total * 100)
                 print(f"{batch_desc}: Item {current}/{total} ({percent}%) completed")
+
+    # Check for cancellation before completion
+    if cancellation_event and cancellation_event.is_set():
+        return result
 
     # Print completion message with lock to avoid interleaving
     with print_lock:

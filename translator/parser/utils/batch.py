@@ -28,6 +28,7 @@ class BatchProcessor:
         parser_callbacks: Optional[List[Any]] = None,
         total_records: Optional[int] = None,
         limit: Optional[int] = None,
+        cancellation_event: Optional[threading.Event] = None,
     ):
         """
         Initialize batch processor.
@@ -43,6 +44,8 @@ class BatchProcessor:
             num_workers: Number of worker threads (None for auto)
             parser_callbacks: List of parser callbacks
             total_records: Total number of records to process (if known)
+            limit: Optional limit on number of items to process
+            cancellation_event: Event to signal when processing should be cancelled
         """
         self.output_dir = output_dir
         self.parser_name = parser_name
@@ -54,6 +57,7 @@ class BatchProcessor:
         self.parser_callbacks = parser_callbacks
         self.total_records = total_records
         self.limit = limit
+        self.cancellation_event = cancellation_event
         # Track worker utilization
         self.worker_stats = {}
 
@@ -200,6 +204,11 @@ class BatchProcessor:
     def _memory_monitor(self):
         """Continuously monitor actual system memory usage"""
         while not self.stop_monitor.is_set():
+            # Check if cancellation is requested
+            if self.cancellation_event and self.cancellation_event.is_set():
+                self.stop_monitor.set()
+                break
+
             actual_memory_percent = psutil.virtual_memory().percent / 100
 
             # If system memory usage is getting too high overall (not just our estimate)
@@ -242,6 +251,10 @@ class BatchProcessor:
         if not batch:
             return 0
 
+        # Check if cancellation is requested
+        if self.cancellation_event and self.cancellation_event.is_set():
+            return 0
+
         # Get current thread ID for tracking
         worker_id = threading.get_ident()
 
@@ -254,6 +267,10 @@ class BatchProcessor:
         try:
             # Process the batch with the provided function
             processed_batch = process_func(batch, f"Batch {batch_num}")
+
+            # Check again for cancellation after processing
+            if self.cancellation_event and self.cancellation_event.is_set():
+                return 0
 
             # Thread-safe file writing
             with self.file_lock:
@@ -282,6 +299,10 @@ class BatchProcessor:
 
         try:
             while not self.stop_monitor.is_set():
+                # Check for cancellation
+                if self.cancellation_event and self.cancellation_event.is_set():
+                    break
+
                 try:
                     # Get batch from queue, with a timeout to regularly check if we should stop
                     batch_info = self.batch_queue.get(timeout=0.5)
@@ -291,11 +312,19 @@ class BatchProcessor:
 
                     batch, batch_num = batch_info
 
+                    # Check for cancellation before processing
+                    if self.cancellation_event and self.cancellation_event.is_set():
+                        self.batch_queue.task_done()
+                        break
+
                     # Process the batch
                     items_processed = self.process_batch(batch, batch_num, process_func)
 
-                    # Update progress
-                    progress_bar.update(items_processed)
+                    # Update progress if not cancelled
+                    if not (
+                        self.cancellation_event and self.cancellation_event.is_set()
+                    ):
+                        progress_bar.update(items_processed)
 
                     # Mark task as done
                     self.batch_queue.task_done()
@@ -309,6 +338,35 @@ class BatchProcessor:
         finally:
             with self.workers_lock:
                 self.active_workers -= 1
+
+    def cancel(self):
+        """Signal all workers to stop processing and clean up resources"""
+        print("❌ Cancellation requested - stopping all processing")
+
+        # Set events to stop processing
+        self.stop_monitor.set()
+        self.processing_complete.set()
+
+        # Clear queue and add sentinel values to ensure workers exit
+        try:
+            while not self.batch_queue.empty():
+                try:
+                    self.batch_queue.get_nowait()
+                    self.batch_queue.task_done()
+                except Empty:
+                    break
+        except Exception as e:
+            print(f"Error clearing queue: {e}")
+
+        # Add sentinel values to ensure all workers exit
+        for _ in range(self.num_workers):
+            try:
+                self.batch_queue.put(None)
+            except Exception as e:
+                print(f"Error adding sentinel: {e}")
+
+        print("❌ Translation cancelled by user")
+        return True
 
     @timeit
     def process_and_save(
@@ -353,11 +411,20 @@ class BatchProcessor:
 
             # Fill batch queue with work
             for item in data_generator:
+                # Check for cancellation
+                if self.cancellation_event and self.cancellation_event.is_set():
+                    print("❌ Cancellation detected during batch creation")
+                    break
+
                 current_batch.append(item)
                 items_collected += 1
 
                 # If we've reached the batch size or the limit, process the batch
                 if len(current_batch) >= current_batch_size:
+                    # Check for cancellation before adding to queue
+                    if self.cancellation_event and self.cancellation_event.is_set():
+                        break
+
                     # Put batch in queue for processing (blocks if queue is full)
                     self.batch_queue.put((current_batch, batch_num))
 
@@ -374,20 +441,27 @@ class BatchProcessor:
                 if limit and items_collected >= limit:
                     break
 
-            # Process any remaining items
-            if current_batch:
-                self.batch_queue.put((current_batch, batch_num))
-                self.batch_sizes.append(len(current_batch))
+            # Check for cancellation before processing remaining items
+            if not (self.cancellation_event and self.cancellation_event.is_set()):
+                # Process any remaining items
+                if current_batch:
+                    self.batch_queue.put((current_batch, batch_num))
+                    self.batch_sizes.append(len(current_batch))
 
             # Signal that we're done producing batches
             self.processing_complete.set()
 
-            # Add sentinel values to queue to signal workers to stop
-            for _ in range(self.num_workers):
-                self.batch_queue.put(None)
+            # If cancelled, call cancel method to clean up
+            if self.cancellation_event and self.cancellation_event.is_set():
+                self.cancel()
+            else:
+                # Add sentinel values to queue to signal workers to stop
+                for _ in range(self.num_workers):
+                    self.batch_queue.put(None)
 
             # Wait for all queued work to be processed
-            self.batch_queue.join()
+            if not (self.cancellation_event and self.cancellation_event.is_set()):
+                self.batch_queue.join()
 
             # Wait for all workers to finish
             for worker in workers:
@@ -400,6 +474,11 @@ class BatchProcessor:
 
         # Close progress bar and print summary
         progress_bar.close()
+
+        # If cancelled, print cancellation message and return
+        if self.cancellation_event and self.cancellation_event.is_set():
+            print("❌ Processing was cancelled - cleaned up resources")
+            return
 
         # Print batch distribution statistics
         if self.batch_sizes:

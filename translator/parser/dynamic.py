@@ -1,5 +1,6 @@
 from typing import List, Dict, Optional, Union
 from datasets import load_dataset
+import threading
 
 from config.qa import QAConfig
 from translator.parser.base import BaseParser
@@ -42,11 +43,15 @@ class DynamicDataParser(BaseParser):
         max_batch_size: int = 5000,
         file_type: Optional[str] = None,
         parser_callbacks: List[BaseCallback] = None,
+        cancellation_event: Optional[threading.Event] = None,
         **parser_kwargs,
     ):
         """
         Initialize a configurable parser for dynamic dataset mapping and translation.
         """
+        # Store cancellation event
+        self.cancellation_event = cancellation_event
+
         # Identify mandatory fields from the target_config
         self.mandatory_fields = get_mandatory_fields(target_config)
 
@@ -124,11 +129,17 @@ class DynamicDataParser(BaseParser):
         self.processed_count = 0
         self.sample_size = 0
         self.item_memory_estimate = None
+        self.batch_processor = None
 
     def read(self) -> None:
         """
         Read data from the specified dataset or local files.
         """
+        # Check for cancellation
+        if self.cancellation_event and self.cancellation_event.is_set():
+            print("❌ Cancellation detected during read phase")
+            return None
+
         super(DynamicDataParser, self).read()
 
         # If file_path is provided, read from local files
@@ -160,6 +171,11 @@ class DynamicDataParser(BaseParser):
         """
         Set up the conversion process but doesn't materialize the entire dataset.
         """
+        # Check for cancellation
+        if self.cancellation_event and self.cancellation_event.is_set():
+            print("❌ Cancellation detected during convert phase")
+            return None
+
         super(DynamicDataParser, self).convert()
 
         # Instead of collecting all data, we'll create generators for each split
@@ -208,6 +224,11 @@ class DynamicDataParser(BaseParser):
         """
         Translate a batch of data.
         """
+        # Check for cancellation
+        if self.cancellation_event and self.cancellation_event.is_set():
+            print(f"❌ Cancellation detected during translation of batch: {desc}")
+            return []
+
         if self.parser_callbacks:
             for callback in self.parser_callbacks:
                 callback.on_start_translate(self)
@@ -237,6 +258,7 @@ class DynamicDataParser(BaseParser):
             self.enable_sub_task_thread,
             self.max_list_length_per_thread,
             desc,
+            self.cancellation_event,
         )
 
         if self.parser_callbacks and (en_data is None and large_chunk is None):
@@ -248,6 +270,11 @@ class DynamicDataParser(BaseParser):
     def process_and_save(self) -> None:
         if not hasattr(self, "data_generators") or not self.data_generators:
             raise ValueError("Must call convert() before process_and_save()")
+
+        # Check for cancellation
+        if self.cancellation_event and self.cancellation_event.is_set():
+            print("❌ Cancellation detected at start of process_and_save")
+            return
 
         # Create a function to get a fresh generator for the primary split
         def get_fresh_generator():
@@ -287,14 +314,14 @@ class DynamicDataParser(BaseParser):
         elif self.batch_size is None:
             self.batch_size = 100
 
-        # Make sure batch_size is not None to avoid the error you encountered
+        # Make sure batch_size is not None to avoid errors
         assert self.batch_size is not None, "Batch size must not be None"
 
         # Create a fresh generator for actual processing
         processing_generator = get_fresh_generator()
 
         # Create processor and define the processing function
-        batch_processor = BatchProcessor(
+        self.batch_processor = BatchProcessor(
             self.output_dir,
             self.parser_name,
             self.batch_size,
@@ -307,22 +334,41 @@ class DynamicDataParser(BaseParser):
                 self, "total_record", None
             ),  # Pass the total_record if available
             limit=getattr(self, "limit", None),
+            cancellation_event=self.cancellation_event,  # Pass the cancellation event
         )
 
         # Process and save the data using the fresh generator
-        batch_processor.process_and_save(
+        def process_with_cancel_check(batch, desc):
+            if self.cancellation_event and self.cancellation_event.is_set():
+                print(f"❌ Cancellation detected during processing batch: {desc}")
+                return []
+            return self.translate_converted(en_data=batch, desc=desc)
+
+        self.batch_processor.process_and_save(
             processing_generator,
-            lambda batch, desc: self.translate_converted(en_data=batch, desc=desc)
-            if self.do_translate
-            else batch,
+            process_with_cancel_check,
             self.limit,
         )
+
+    def cancel(self):
+        """Cancel the processing and clean up resources"""
+        print("❌ Cancellation requested for DynamicDataParser")
+        if hasattr(self, "batch_processor") and self.batch_processor:
+            return self.batch_processor.cancel()
+        return True
 
     def save(self) -> None:
         """
         Process and save the data incrementally.
         """
+        # Check for cancellation
+        if self.cancellation_event and self.cancellation_event.is_set():
+            print("❌ Cancellation detected during save phase")
+            return
+
         self.process_and_save()
-        if self.parser_callbacks:
-            for callback in self.parser_callbacks:
-                callback.on_finish_save_translated(self)
+
+        if not (self.cancellation_event and self.cancellation_event.is_set()):
+            if self.parser_callbacks:
+                for callback in self.parser_callbacks:
+                    callback.on_finish_save_translated(self)

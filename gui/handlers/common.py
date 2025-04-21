@@ -4,10 +4,14 @@ from gui.handlers.source import (
     switch_config,
 )
 from gui.handlers.mapping import add_field, remove_field, update_dropdown_options
-from gui.handlers.translation import translate_dataset
+from gui.handlers.translation import translate_dataset, cancel_translation
 from gui.utils.json import update_json_mapping
 import gradio as gr
 import os
+import threading
+
+# Global app state dictionary
+app_state = {"cancellation_event": None}
 
 
 def disable_all_components():
@@ -30,6 +34,16 @@ def disable_all_components():
 
     # Return all updates
     return button_updates + other_updates
+
+
+def update_button_visibility_on_start():
+    """Update button visibility when translation starts"""
+    return gr.update(visible=False), gr.update(visible=True)
+
+
+def update_button_visibility_on_cancel():
+    """Update button visibility when translation is cancelled"""
+    return gr.update(visible=True), gr.update(visible=False)
 
 
 def register_all_handlers(components):
@@ -205,6 +219,13 @@ def register_all_handlers(components):
         "max_batch_size",
     ]
 
+    # Update button visibility (make cancel button visible and hide submit button)
+    components["submit_button"].click(
+        update_button_visibility_on_start,
+        outputs=[components["submit_button"], components["cancel_button"]],
+        queue=False,  # Run immediately without queueing
+    )
+
     # First click event: Disable all components immediately
     components["submit_button"].click(
         disable_all_components,
@@ -234,7 +255,18 @@ def register_all_handlers(components):
             components["progress_status"],
         ],
         outputs=[components["logs_output"]]
-        + [components[key] for key in button_keys + other_keys],
+        + [components[key] for key in button_keys + other_keys]
+        + [components["submit_button"], components["cancel_button"]],
         queue=True,  # Queue this function for background execution
         concurrency_limit=1,  # Only one instance at a time
+    )
+
+    # Cancel button handler
+    components["cancel_button"].click(
+        cancel_translation,
+        inputs=[components["log_file_path"]],
+        outputs=[components["logs_output"]]
+        + [components[key] for key in button_keys + other_keys]
+        + [components["submit_button"], components["cancel_button"]],
+        queue=False,  # Run immediately without queueing
     )
