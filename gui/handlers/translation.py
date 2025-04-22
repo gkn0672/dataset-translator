@@ -90,6 +90,9 @@ def cancel_translation(log_file_path):
                 log_callback.add_log("❌ Cancel signal sent to parser")
             except Exception as e:
                 log_callback.add_log(f"Error while cancelling parser: {str(e)}")
+        log_callback.add_log(
+            "⏳ Cancellation in progress - waiting for workers to terminate..."
+        )
     else:
         log_callback.add_log("No active translation found to cancel")
 

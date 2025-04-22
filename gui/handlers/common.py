@@ -7,8 +7,6 @@ from gui.handlers.mapping import add_field, remove_field, update_dropdown_option
 from gui.handlers.translation import translate_dataset, cancel_translation
 from gui.utils.json import update_json_mapping
 import gradio as gr
-import os
-import threading
 
 # Global app state dictionary
 app_state = {"cancellation_event": None}
@@ -233,8 +231,7 @@ def register_all_handlers(components):
         queue=False,  # Run immediately without queueing
     )
 
-    # Second click event: Run the actual translation process
-    components["submit_button"].click(
+    translation_event = components["submit_button"].click(
         translate_dataset,
         inputs=[
             components["data_source_type"],
@@ -257,16 +254,17 @@ def register_all_handlers(components):
         outputs=[components["logs_output"]]
         + [components[key] for key in button_keys + other_keys]
         + [components["submit_button"], components["cancel_button"]],
-        queue=True,  # Queue this function for background execution
-        concurrency_limit=1,  # Only one instance at a time
+        queue=True,
+        concurrency_limit=1,
     )
 
-    # Cancel button handler
+    # CHANGE: Add the cancels parameter to cancel the translation event
     components["cancel_button"].click(
         cancel_translation,
         inputs=[components["log_file_path"]],
         outputs=[components["logs_output"]]
         + [components[key] for key in button_keys + other_keys]
         + [components["submit_button"], components["cancel_button"]],
-        queue=False,  # Run immediately without queueing
+        queue=False,
+        cancels=[translation_event],  # Add this line to use Gradio's cancellation
     )
