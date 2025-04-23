@@ -291,6 +291,8 @@ def translate_dataset(
         sys.stderr = LogRedirector(log_callback)
 
         try:
+            if int(limit) <= 0:
+                limit = None
             # Create the parser instance with cancellation event
             parser = DynamicDataParser(
                 file_path=actual_file_path,
