@@ -119,31 +119,38 @@ def update_dropdown_options(
             selected_values.append(cot_answer)
 
     # For each dropdown, filter out selected values except its own value
-    qa_question_options = [""] + [
-        prop
-        for prop in available_properties
-        if prop not in selected_values or prop == qa_question
-    ]
-    qa_answer_options = [""] + [
-        prop
-        for prop in available_properties
-        if prop not in selected_values or prop == qa_answer
-    ]
-    cot_question_options = [""] + [
-        prop
-        for prop in available_properties
-        if prop not in selected_values or prop == cot_question
-    ]
-    cot_reasoning_options = [""] + [
-        prop
-        for prop in available_properties
-        if prop not in selected_values or prop == cot_reasoning
-    ]
-    cot_answer_options = [""] + [
-        prop
-        for prop in available_properties
-        if prop not in selected_values or prop == cot_answer
-    ]
+    qa_question_options = [""]
+    qa_answer_options = [""]
+    cot_question_options = [""]
+    cot_reasoning_options = [""]
+    cot_answer_options = [""]
+
+    if available_properties:
+        qa_question_options = [""] + [
+            prop
+            for prop in available_properties
+            if prop not in selected_values or prop == qa_question
+        ]
+        qa_answer_options = [""] + [
+            prop
+            for prop in available_properties
+            if prop not in selected_values or prop == qa_answer
+        ]
+        cot_question_options = [""] + [
+            prop
+            for prop in available_properties
+            if prop not in selected_values or prop == cot_question
+        ]
+        cot_reasoning_options = [""] + [
+            prop
+            for prop in available_properties
+            if prop not in selected_values or prop == cot_reasoning
+        ]
+        cot_answer_options = [""] + [
+            prop
+            for prop in available_properties
+            if prop not in selected_values or prop == cot_answer
+        ]
 
     # Return updates for all dropdowns
     return (
@@ -156,5 +163,7 @@ def update_dropdown_options(
         gr.update(
             choices=[""]
             + [prop for prop in available_properties if prop not in selected_values]
+            if available_properties
+            else [""],
         ),
     )

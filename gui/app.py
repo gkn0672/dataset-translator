@@ -30,6 +30,14 @@ def create_interface():
                 # Logs component
                 log_components = create_logs()
                 components.update(log_components)
+                with gr.Row():
+                    gr.HTML("")  # Spacer to align the button
+                    components["reset_button"] = gr.Button(
+                        "🔄 Reset",
+                        variant="secondary",
+                        size="sm",
+                        elem_id="reset-translation-btn",
+                    )
 
         # Main tabs
         with gr.Row():

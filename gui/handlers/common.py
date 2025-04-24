@@ -7,9 +7,99 @@ from gui.handlers.mapping import add_field, remove_field, update_dropdown_option
 from gui.handlers.translation import translate_dataset, cancel_translation
 from gui.utils.json import update_json_mapping
 import gradio as gr
+import json
 
 # Global app state dictionary
 app_state = {"cancellation_event": None}
+
+
+def reset_ui_components(log_file_path):
+    """
+    Reset all UI components to their default state.
+
+    Args:
+        log_file_path (str): Path to the log file to clear
+    """
+    # Clear the log file
+    try:
+        with open(log_file_path, "w", encoding="utf-8") as f:
+            f.write("")
+    except Exception as e:
+        print(f"Error clearing log file: {e}")
+
+    # Return default values for each component type in the exact order
+    return (
+        # Logs output
+        "",
+        # State components
+        None,  # log_file_path
+        None,  # progress_status
+        # Reset button (no specific reset needed)
+        gr.update(),
+        # Available properties state
+        None,
+        # Data source type
+        gr.update(value="dataset"),
+        # Dataset name
+        gr.update(value="argilla/magpie-ultra-v0.1"),
+        # File path
+        gr.update(value="", visible=False),
+        # Fetch properties button
+        gr.update(interactive=True),
+        # Target config
+        gr.update(value="QAConfig"),
+        # Available properties display
+        gr.update(value=""),
+        # Additional fields state
+        None,
+        # QA Fields group
+        gr.update(visible=True),
+        # QA Dropdowns
+        gr.update(value="", choices=[""]),  # qa_question_dropdown
+        gr.update(value="", choices=[""]),  # qa_answer_dropdown
+        # COT Fields group
+        gr.update(visible=False),
+        # COT Dropdowns
+        gr.update(value="", choices=[""]),  # cot_question_dropdown
+        gr.update(value="", choices=[""]),  # cot_reasoning_dropdown
+        gr.update(value="", choices=[""]),  # cot_answer_dropdown
+        # Additional fields table
+        gr.update(value="No additional fields added yet"),
+        # New field key
+        gr.update(value=""),
+        # New field value dropdown
+        gr.update(value="", choices=[""]),
+        # Add field button
+        gr.update(),
+        # Field to remove dropdown
+        gr.update(value=None, choices=[]),
+        # Remove field button
+        gr.update(),
+        # Field mappings
+        gr.update(value=json.dumps({"question": "", "answer": ""}, indent=2)),
+        # Translator engine
+        gr.update(value="ollama"),
+        # Translator model
+        gr.update(value="llama3.1:8b-instruct-q4_0"),
+        # Use verbose
+        gr.update(value=True),
+        # Push to HuggingFace
+        gr.update(value=False),
+        # Output directory
+        gr.update(value="samples/out"),
+        # Limit
+        gr.update(value=10),
+        # Max memory percent
+        gr.update(value=0.6),
+        # Min batch size
+        gr.update(value=1),
+        # Max batch size
+        gr.update(value=5),
+        # Submit button
+        gr.update(visible=True),
+        # Cancel button
+        gr.update(visible=False),
+    )
 
 
 def disable_all_components():
@@ -51,7 +141,6 @@ def register_all_handlers(components):
     Args:
         components (dict): Dictionary of UI components
     """
-
     # Source type change
     components["data_source_type"].change(
         lambda source_type, config_type: update_on_source_change(
@@ -267,4 +356,13 @@ def register_all_handlers(components):
         + [components["submit_button"], components["cancel_button"]],
         queue=False,
         cancels=[translation_event],  # Add this line to use Gradio's cancellation
+    )
+
+    # TODO: also reset the page to clear the log window
+    components["reset_button"].click(
+        lambda: reset_ui_components(components["log_file_path"].value),
+        inputs=[],
+        outputs=list(components.values()),
+        queue=False,  # Run immediately without queueing
+        js="() => { window.location.reload(); return []; }",
     )

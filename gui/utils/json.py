@@ -75,8 +75,9 @@ def update_json_mapping(
         mapping["answer"] = cot_answer
 
     # Add additional fields
-    for field in additional_fields:
-        if field["key"] and field["key"] not in mapping:
-            mapping[field["key"]] = field["value"]
+    if additional_fields:
+        for field in additional_fields:
+            if field["key"] and field["key"] not in mapping:
+                mapping[field["key"]] = field["value"]
 
     return json.dumps(mapping, indent=2)
