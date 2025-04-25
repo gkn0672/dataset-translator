@@ -95,6 +95,10 @@ def reset_ui_components(log_file_path):
         gr.update(value=1),
         # Max batch size
         gr.update(value=5),
+        # Credential manager components
+        gr.update(value=""),  # groq_api_key
+        gr.update(value="Terryagu"),  # hf_username
+        gr.update(value=""),  # hf_token
         # Submit button
         gr.update(visible=True),
         # Cancel button
@@ -118,7 +122,7 @@ def disable_all_components():
     ]
 
     # Create other component updates (just disabled)
-    other_updates = [gr.update(interactive=False) for _ in range(21)]
+    other_updates = [gr.update(interactive=False) for _ in range(24)]
 
     # Return all updates
     return button_updates + other_updates
@@ -304,6 +308,9 @@ def register_all_handlers(components):
         "max_memory_percent",
         "min_batch_size",
         "max_batch_size",
+        "groq_api_key",
+        "hf_username",
+        "hf_token",
     ]
 
     # Update button visibility (make cancel button visible and hide submit button)
@@ -338,6 +345,9 @@ def register_all_handlers(components):
             components["max_batch_size"],
             components["output_dir"],
             components["log_file_path"],
+            components["groq_api_key"],
+            components["hf_username"],
+            components["hf_token"],
             components["progress_status"],
         ],
         outputs=[components["logs_output"]]

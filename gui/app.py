@@ -5,6 +5,7 @@ from gui.components.logs import create_logs
 from gui.components.source_config import create_source_config
 from gui.components.field_mapping import create_field_mapping
 from gui.components.translation_settings import create_translation_settings
+from gui.components.credential_manager import create_credential_manager  # Added import
 from gui.handlers.common import register_all_handlers
 
 
@@ -56,6 +57,11 @@ def create_interface():
                 with gr.TabItem("Translation Settings", id="settings_tab"):
                     settings_components = create_translation_settings()
                     components.update(settings_components)
+
+                # Credential Manager Tab - ADDED
+                with gr.TabItem("Credential Manager", id="credentials_tab"):
+                    credential_components = create_credential_manager()
+                    components.update(credential_components)
 
         # Start translation and cancel buttons (outside tabs)
         with gr.Row():

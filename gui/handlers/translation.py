@@ -5,7 +5,6 @@ import os
 import threading
 import gradio as gr
 from translator.parser.dynamic import DynamicDataParser
-from translator.callback.huggingface import HuggingFaceCallback
 from translator.callback.gradio import LogCaptureCallback
 from engine.ollama import OllamaEngine
 from engine.groq import GroqEngine
@@ -104,7 +103,7 @@ def cancel_translation(log_file_path):
     # 4 buttons with primary variant
     button_updates = [gr.update(interactive=True, variant="primary") for _ in range(4)]
     # 21 other components just enabled
-    other_updates = [gr.update(interactive=True) for _ in range(21)]
+    other_updates = [gr.update(interactive=True) for _ in range(24)]
     # Update button visibility
     submit_visible = gr.update(visible=True)
     cancel_visible = gr.update(visible=False)
@@ -136,6 +135,9 @@ def translate_dataset(
     max_batch_size,
     output_dir,
     log_file_path,
+    groq_api_key,
+    hf_username,
+    hf_token,
     progress_status=None,
 ):
     """
@@ -173,7 +175,7 @@ def translate_dataset(
                 gr.update(interactive=True, variant="primary") for _ in range(4)
             ]
             # 21 other components just enabled
-            other_updates = [gr.update(interactive=True) for _ in range(21)]
+            other_updates = [gr.update(interactive=True) for _ in range(24)]
             # Update button visibility
             submit_visible = gr.update(visible=True)
             cancel_visible = gr.update(visible=False)
@@ -195,7 +197,7 @@ def translate_dataset(
             button_updates = [
                 gr.update(interactive=True, variant="primary") for _ in range(4)
             ]
-            other_updates = [gr.update(interactive=True) for _ in range(21)]
+            other_updates = [gr.update(interactive=True) for _ in range(24)]
             # Update button visibility
             submit_visible = gr.update(visible=True)
             cancel_visible = gr.update(visible=False)
@@ -213,7 +215,16 @@ def translate_dataset(
         # Set up callbacks - use only LogCaptureCallback for cleaner logs
         parser_callbacks = []  # <-- Changed from [LogCaptureCallback]
         if push_to_huggingface:
-            parser_callbacks.append(HuggingFaceCallback)
+            if hf_token:
+                os.environ["HF_TOKEN"] = hf_token
+                os.environ["HF_USERNAME"] = hf_username
+                log_callback.add_log(
+                    f"Using HuggingFace credentials for user: {hf_username}"
+                )
+            else:
+                log_callback.add_log(
+                    "Warning: HuggingFace token is missing but pushing is enabled"
+                )
 
         # Create translator engine
         if translator_engine == "ollama":
@@ -223,8 +234,29 @@ def translate_dataset(
             )
         elif translator_engine == "groq":
             # Use GroqEngine
-            translator = GroqEngine()
-            log_callback.add_log("Using Groq translator")
+            if groq_api_key:
+                os.environ["GROQ_API_KEY"] = groq_api_key
+                translator = GroqEngine()
+                log_callback.add_log("Using Groq translator with provided API key")
+            else:
+                log_callback.add_log(
+                    "Error: Groq API key is required for Groq translator"
+                )
+                # Re-enable components and return
+                button_updates = [
+                    gr.update(interactive=True, variant="primary") for _ in range(4)
+                ]
+                other_updates = [
+                    gr.update(interactive=True) for _ in range(24)
+                ]  # Updated count
+                submit_visible = gr.update(visible=True)
+                cancel_visible = gr.update(visible=False)
+                return (
+                    [log_callback.get_logs()]
+                    + button_updates
+                    + other_updates
+                    + [submit_visible, cancel_visible]
+                )
         else:
             log_callback.add_log(
                 f"Unknown translator engine: {translator_engine}. Please use Ollama or Groq."
@@ -233,7 +265,7 @@ def translate_dataset(
             button_updates = [
                 gr.update(interactive=True, variant="primary") for _ in range(4)
             ]
-            other_updates = [gr.update(interactive=True) for _ in range(21)]
+            other_updates = [gr.update(interactive=True) for _ in range(24)]
             # Update button visibility
             submit_visible = gr.update(visible=True)
             cancel_visible = gr.update(visible=False)
@@ -350,7 +382,7 @@ def translate_dataset(
         button_updates = [
             gr.update(interactive=True, variant="primary") for _ in range(4)
         ]
-        other_updates = [gr.update(interactive=True) for _ in range(21)]
+        other_updates = [gr.update(interactive=True) for _ in range(24)]
 
         # Update button visibility
         submit_visible = gr.update(visible=True)
@@ -377,7 +409,7 @@ def translate_dataset(
         button_updates = [
             gr.update(interactive=True, variant="primary") for _ in range(4)
         ]
-        other_updates = [gr.update(interactive=True) for _ in range(21)]
+        other_updates = [gr.update(interactive=True) for _ in range(24)]
 
         # Update button visibility
         submit_visible = gr.update(visible=True)
