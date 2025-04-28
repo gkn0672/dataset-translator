@@ -8,6 +8,13 @@
 
 </div>
 
+## 📋 Table of Contents
+
+- [Introduction](#-introduction)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Running the Application](#-running-the-application)
+
 ## 🌟 Introduction
 
 Dataset Translator is a powerful tool designed to translate datasets from English to Vietnamese. It provides a user-friendly GUI built with Gradio for translating various data formats including JSON and Parquet files. The tool supports multiple translation engines including:
