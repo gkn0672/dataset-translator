@@ -1,4 +1,12 @@
-# 📚 Dataset Translator Documentation
+<div align="center">
+<img src="https://github.com/bloomifycafe/blossomsAI/blob/main/assets/logo.png?raw=true" alt="Logo"/>
+</div>
+</br>
+<div align="center">
+
+# 📚 Dataset Translator 
+
+</div>
 
 ## 🌟 Introduction
 
